@@ -165,7 +165,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.4
+ghcr.io/zmk112/cac-docker-claude:v0.1.5
 ```
 
 Force a rebuild:
@@ -178,6 +178,12 @@ Pass a build proxy for downloads during image build:
 
 ```bash
 BUILD_PROXY=socks5h://127.0.0.1:7890 cac docker create
+```
+
+Build progress is printed in plain mode by default so Dockerfile steps, package downloads, and npm output remain visible in real time. To restore Docker Compose's default progress UI, set:
+
+```bash
+COMPOSE_PROGRESS=auto BUILDKIT_PROGRESS=auto cac docker create
 ```
 
 ## Data Layout
@@ -273,14 +279,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.4 bash scripts/package-source.sh
+PKG_VERSION=v0.1.5 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.4.zip
-dist/cac-docker-claude-source-v0.1.4.sha256
+dist/cac-docker-claude-source-v0.1.5.zip
+dist/cac-docker-claude-source-v0.1.5.sha256
 scripts/install-stable.sh
 ```
 

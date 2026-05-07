@@ -643,6 +643,8 @@ _dk_compose() {
   workspace_host=$(_dk_workspace_host_abs) || return 1
   docker_socket="$(_dk_host_docker_socket)"
   env -u DOCKER_HOST -u DOCKER_CONTEXT \
+    BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}" \
+    COMPOSE_PROGRESS="${COMPOSE_PROGRESS:-plain}" \
     CAC_WORKSPACE_HOST="$workspace_host" \
     CAC_HOST_DOCKER_SOCKET="$docker_socket" \
     docker compose "${files[@]}" "$@"
