@@ -184,7 +184,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.9
+ghcr.io/zmk112/cac-docker-claude:v0.1.10
 ```
 
 Force a rebuild:
@@ -306,14 +306,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.9 bash scripts/package-source.sh
+PKG_VERSION=v0.1.10 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.9.zip
-dist/cac-docker-claude-source-v0.1.9.sha256
+dist/cac-docker-claude-source-v0.1.10.zip
+dist/cac-docker-claude-source-v0.1.10.sha256
 scripts/install-stable.sh
 ```
 
