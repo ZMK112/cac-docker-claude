@@ -554,10 +554,13 @@
 }
 
 /* Mobile optimizations and components */
-@layer components {
-  /* Mobile touch optimization and safe areas */
-  @media (max-width: 768px) {
-    * {
+/* Mobile touch optimization and safe areas */
+@media (max-width: 768px) {
+    button,
+    [role="button"],
+    .clickable,
+    a,
+    .cursor-pointer {
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
     }
@@ -651,18 +654,22 @@
   
   /* Touch device optimizations for all screen sizes */
   @media (hover: none) and (pointer: coarse) {
-    .touch\:opacity-100 {
+    .touch-opacity-100 {
       opacity: 1 !important;
     }
     
     /* Completely disable hover states on touch devices */
-    * {
-      -webkit-tap-highlight-color: transparent !important;
+    button,
+    [role="button"],
+    .clickable,
+    a,
+    .cursor-pointer {
+      -webkit-tap-highlight-color: transparent;
     }
     
     /* Preserve checkbox visibility on touch devices */
     input[type="checkbox"] {
-      -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+      -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
       opacity: 1 !important;
     }
     
@@ -753,7 +760,6 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
-}
 
 /* Hide markdown backticks in prose content */
 .prose code::before,

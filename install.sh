@@ -136,8 +136,8 @@ run_local_build() {
 }
 
 download_remote_asset() {
-    local name="$1"
-    if ! curl -fsSL "${REPO_BASE_URL}/${name}" -o "${DIST_DIR}/${name}"; then
+    local name="$1" output="${2:-${DIST_DIR}/${name}}"
+    if ! curl -fsSL "${REPO_BASE_URL}/${name}" -o "$output"; then
         red "error: failed to download ${name} from ${REPO_BASE_URL}/${name}"
         red "hint: if you extracted a release/source archive, run this installer from that directory so it uses local mode instead of remote mode"
         exit 1
@@ -145,19 +145,21 @@ download_remote_asset() {
 }
 
 install_assets() {
+    local tmp_cac="${DIST_DIR}/.cac.$$.new"
     mkdir -p "$DIST_DIR"
 
     if [[ "$INSTALL_MODE" == "local" ]]; then
         echo "Installing from local repo ..."
-        cp "${SCRIPT_DIR}/cac" "${DIST_DIR}/cac" &
+        cp "${SCRIPT_DIR}/cac" "$tmp_cac" &
         wait_with_progress "Installing from local repo" "$!"
     else
         echo "Downloading cac assets ..."
-        download_remote_asset "cac" &
+        download_remote_asset "cac" "$tmp_cac" &
         wait_with_progress "Downloading cac assets" "$!"
     fi
 
-    chmod +x "${DIST_DIR}/cac"
+    chmod +x "$tmp_cac"
+    mv -f "$tmp_cac" "${DIST_DIR}/cac"
 }
 
 link_entrypoint() {
