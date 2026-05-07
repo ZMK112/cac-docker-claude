@@ -22,6 +22,10 @@ Non-Docker cac features such as `cac env`, `cac claude`, local relay mode, and l
 
 Install the latest stable release:
 
+Migration note: this installer and updater preserve existing Claude login state, personalization data, Docker settings, mounts, and container home data under `~/.cac/docker`. Images and containers may be rebuilt during install or update, but user data is kept and you normally do not need to log in to Claude again.
+
+中文提示：执行下面的一键安装或升级命令不会删除已有 Claude 登录信息、个性化配置、项目数据、挂载配置和 Docker 运行数据。迁移是安全的；安装或升级过程中可能会重建镜像/容器，但不会因此要求重复登录。
+
 ```bash
 curl -fsSL https://github.com/ZMK112/cac-docker-claude/releases/latest/download/install-stable.sh | bash
 ```
@@ -159,7 +163,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.2
+ghcr.io/zmk112/cac-docker-claude:v0.1.3
 ```
 
 Force a rebuild:
@@ -208,7 +212,26 @@ If enabled during setup, the Web UI is exposed on the configured local port, nor
 http://127.0.0.1:3001
 ```
 
-SSH can also be enabled for direct container access. Keep SSH bound to localhost unless you explicitly need LAN access, and change the default password before exposing it beyond localhost.
+SSH can also be enabled for direct container access. `cac docker setup` lets you enable SSH, choose the host port, and set the password. After the stack starts, `cac docker status` prints the SSH command.
+
+Default local connection:
+
+```bash
+ssh -p 2222 cherny@127.0.0.1
+```
+
+Common SSH settings in `~/.cac/docker/.env`:
+
+```text
+CAC_ENABLE_SSH=1
+CAC_HOST_SSH_BIND=127.0.0.1
+CAC_HOST_SSH_PORT=2222
+CAC_SSH_PASSWORD=your-password
+```
+
+Keep SSH bound to `127.0.0.1` unless you explicitly need LAN access. If you bind SSH to `0.0.0.0` or another LAN address, change `CAC_SSH_PASSWORD` first and restrict access at the host firewall.
+
+中文：SSH 用于从宿主机直接进入主容器。默认建议只监听 `127.0.0.1`，连接命令通常是 `ssh -p 2222 cherny@127.0.0.1`。如果要开放给局域网，先修改默认密码，并确认宿主机防火墙规则。
 
 ## Troubleshooting
 
@@ -248,14 +271,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.2 bash scripts/package-source.sh
+PKG_VERSION=v0.1.3 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.2.zip
-dist/cac-docker-claude-source-v0.1.2.sha256
+dist/cac-docker-claude-source-v0.1.3.zip
+dist/cac-docker-claude-source-v0.1.3.sha256
 scripts/install-stable.sh
 ```
 
