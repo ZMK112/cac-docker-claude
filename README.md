@@ -1,8 +1,20 @@
 # cac-docker-claude
 
-Docker-only Claude Code runtime with sing-box TUN isolation, proxy-chain support, persistent Claude state, and local Docker image builds.
+Docker-only Claude Code runtime for isolated, proxy-controlled Claude Code workspaces.
 
-中文：这是从原 `cac` 项目拆分出来的 Docker 专用版本。它只保留 `cac docker ...` 工作流，用 Docker 容器运行 Claude Code，并通过 sing-box TUN 把容器网络流量纳入代理和规则控制。
+`cac-docker-claude` provides a reproducible Docker workspace for Claude Code with sing-box TUN routing, chained proxy support, persistent Claude state, local image builds, SSH/Web access, and safe stable upgrades.
+
+中文：`cac-docker-claude` 是从原 `cac` 项目拆分出来的 Docker 专用版本。它只保留 `cac docker ...` 工作流，用 Docker 容器运行 Claude Code，并通过 sing-box TUN 把容器网络流量纳入代理和规则控制，同时保留 Claude 登录状态、个性化数据和工作区数据。
+
+## Highlights
+
+- **Docker-first runtime**: one focused command surface, `cac docker ...`.
+- **Network isolation**: main container traffic goes through sing-box TUN; internal Docker/LAN routes can stay direct.
+- **Proxy-chain migration**: Mihomo YAML chain configs can be converted into sing-box runtime config.
+- **Safe persistence**: Claude credentials, personalization, home data, mounts, and Docker settings live under `~/.cac/docker`.
+- **Local source builds**: stable installs include the full source tree under `~/.cac/source`, so runtime images can be rebuilt locally.
+- **Operational access**: optional SSH, Web UI, Docker socket proxy, child-container proxy bridge, zsh/Oh My Zsh, tmux defaults, and extra mounts.
+- **Stable updates with rollback**: `cac docker update` installs the latest stable release and preserves existing state.
 
 ## What It Provides
 
@@ -17,6 +29,10 @@ Docker-only Claude Code runtime with sing-box TUN isolation, proxy-chain support
 - Web UI, SSH, Docker socket proxy, child-container proxy bridge, and extra mount management
 
 Non-Docker cac features such as `cac env`, `cac claude`, local relay mode, and local fingerprint-hook environments are not part of this project.
+
+## Project Scope
+
+This project is intentionally narrow: it manages the Docker-based Claude Code runtime only. It does not replace Docker itself, does not expose the old local `cac` workflows, and does not delete existing Claude data during normal install, update, rebuild, start, stop, or restart operations.
 
 ## Install
 
@@ -78,9 +94,10 @@ cac docker start
 | `cac docker setup` | Interactive setup for proxy, network, data path, shell, SSH, Web UI, and mounts. | 交互式配置代理、网络、数据目录、Shell、SSH、Web UI 和挂载。 |
 | `cac docker create` | Build or prepare Docker images and compose resources. | 构建或准备 Docker 镜像和 compose 资源。 |
 | `CAC_DOCKER_REBUILD=1 cac docker create` | Force a local image rebuild. | 强制重新本地构建镜像。 |
-| `cac docker start` | Start the Docker runtime stack. | 启动 Docker 运行环境。 |
+| `cac docker rebuild` | Force a rebuild, recreate the container when needed, then ask before removing old project images. | 强制重建，需要时重建容器；完成后会询问是否清理本项目旧镜像。 |
+| `cac docker start` | Start the Docker runtime stack; if already running, report status and exit successfully. | 启动 Docker 运行环境；如果已经运行则提示状态并正常退出。 |
 | `cac docker stop` | Stop the runtime stack without deleting data. | 停止运行环境，不删除数据。 |
-| `cac docker restart` | Restart the runtime stack. | 重启运行环境。 |
+| `cac docker restart` | Restart the runtime stack and remount the current directory as `/workspace`. | 重启运行环境，并把当前目录重新挂载为 `/workspace`。 |
 | `cac docker enter` | Open a shell inside the protected container. | 进入受保护的主容器 Shell。 |
 | `cac docker check` | Run network, DNS, TUN, exit IP, identity, SSH, and trace checks. | 检查网络、DNS、TUN、出口 IP、身份伪装、SSH 和容器痕迹。 |
 | `cac docker status` | Show current container, image, proxy, port, and data status. | 查看容器、镜像、代理、端口和数据状态。 |
@@ -110,13 +127,13 @@ Remove a mount:
 cac docker mount rm /workspace/name
 ```
 
-After changing mounts, restart the stack:
+Restart the stack and remount the current directory as `/workspace`:
 
 ```bash
 cac docker restart
 ```
 
-Mount targets under `/workspace` are reserved and rejected. The main `/workspace` bind is controlled by the directory used for `cac docker start`; applying extra mounts will not cover it. If a running container is recreated by `cac docker mount`, the existing workspace path is preserved.
+Mount targets under `/workspace` are reserved and rejected. The main `/workspace` bind is controlled by the directory used for `cac docker restart` or the first `cac docker start` when no container is running. Running `cac docker start` against an already running stack is a no-op and will not change the active workspace. If a running container is recreated by `cac docker mount`, the existing workspace path is preserved.
 
 ## Proxy Modes
 
@@ -175,6 +192,14 @@ Force a rebuild:
 ```bash
 CAC_DOCKER_REBUILD=1 cac docker create
 ```
+
+Rebuild and optionally clean old project images:
+
+```bash
+cac docker rebuild
+```
+
+`cac docker rebuild` only offers to remove images identified as this project or historical cac Docker image tags, and it protects images currently used by containers.
 
 Pass a build proxy for downloads during image build:
 

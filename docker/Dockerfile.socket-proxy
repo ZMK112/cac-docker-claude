@@ -1,5 +1,9 @@
 FROM alpine:3.20
 
+LABEL com.cac-docker-claude.project="true" \
+      org.opencontainers.image.title="cac-docker-claude-docker-proxy" \
+      org.opencontainers.image.source="https://github.com/ZMK112/cac-docker-claude"
+
 RUN apk add --no-cache socat
 
 ENTRYPOINT ["socat", "TCP-LISTEN:2375,reuseaddr,fork", "UNIX-CONNECT:/var/run/docker.sock"]

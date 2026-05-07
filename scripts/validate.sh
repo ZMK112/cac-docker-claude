@@ -40,6 +40,8 @@ pass "build"
 ./cac --help >/dev/null
 ./cac --version >/dev/null
 ./cac docker help >/dev/null
+./cac docker help | grep -q "start      Start the container; no-op if already running"
+./cac docker help | grep -q "restart    Restart and remount the current directory as /workspace"
 if ./cac env ls >/tmp/cac-docker-claude-local.out 2>&1; then
     printf 'local env command unexpectedly succeeded\n' >&2
     exit 1

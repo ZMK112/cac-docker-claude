@@ -13,7 +13,10 @@ ARG CAC_FAKE_USER=cherny
 ARG CAC_FAKE_UID=1001
 ARG CAC_FAKE_GID=1001
 
-LABEL cac.docker_cli_version="${DOCKER_CLI_VERSION}" \
+LABEL com.cac-docker-claude.project="true" \
+      org.opencontainers.image.title="cac-docker-claude" \
+      org.opencontainers.image.source="https://github.com/ZMK112/cac-docker-claude" \
+      cac.docker_cli_version="${DOCKER_CLI_VERSION}" \
       cac.docker_cli_api_version="${DOCKER_CLI_API_VERSION}"
 
 # System packages + uv + sing-box

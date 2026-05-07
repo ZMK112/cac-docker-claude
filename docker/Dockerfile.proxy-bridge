@@ -4,6 +4,10 @@ ARG SINGBOX_VERSION=1.12.14
 ARG BUILD_PROXY
 ARG TARGETARCH
 
+LABEL com.cac-docker-claude.project="true" \
+      org.opencontainers.image.title="cac-docker-claude-proxy-bridge" \
+      org.opencontainers.image.source="https://github.com/ZMK112/cac-docker-claude"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN set -eux; \

@@ -564,10 +564,23 @@ _dk_cmd_create() {
 
 _dk_cmd_start() {
   _dk_init || return 1
-  local ssh_enabled ssh_port web_port current_state
+  local ssh_enabled ssh_port web_port current_state running_workspace requested_workspace
   [[ ! -f "$_dk_env_file" ]] && { _warn "No config found, running setup first..."; _dk_cmd_setup; }
   _dk_load_env
   current_state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")
+  if [[ "$current_state" == "running" ]]; then
+    running_workspace="$(_dk_workspace_host_current 2>/dev/null || echo "")"
+    requested_workspace="$(_dk_workspace_host_abs 2>/dev/null || echo "")"
+    _ok "Container already running"
+    [[ -n "$running_workspace" ]] && _info "Workspace:    \033[1m/workspace\033[0m (host: ${running_workspace})"
+    if [[ -n "$requested_workspace" && -n "$running_workspace" && "$requested_workspace" != "$running_workspace" ]]; then
+      _info "Current directory would mount as /workspace after restart: \033[1m${requested_workspace}\033[0m"
+      _info "Use: \033[1mcac docker restart\033[0m"
+    fi
+    _info "Enter with:   \033[1mcac docker enter\033[0m"
+    _info "Check with:   \033[1mcac docker check\033[0m"
+    return 0
+  fi
   _dk_prepare_host_ports "$current_state" || return 1
   _dk_maybe_migrate_child_proxy
   _dk_assert_docker_cli_compat || return 1
@@ -629,8 +642,94 @@ _dk_cmd_stop() {
 }
 
 _dk_cmd_restart() {
-  _dk_cmd_stop
+  local workspace_host
+  workspace_host="$(_dk_workspace_host_abs 2>/dev/null || echo "")"
+  [[ -n "$workspace_host" ]] && _info "Restarting with workspace: \033[1m${workspace_host}\033[0m → /workspace"
+  _dk_cmd_stop || return 1
   _dk_cmd_start
+}
+
+_dk_project_image_cleanup_candidates() {
+  local current_id protected_file images_file repo
+  protected_file="$(mktemp)"
+  images_file="$(mktemp)"
+
+  current_id="$(_dk_host_docker image inspect -f '{{.Id}}' "$_dk_image" 2>/dev/null || true)"
+  [[ -n "$current_id" ]] && printf '%s\n' "$current_id" >> "$protected_file"
+
+  for repo in \
+    "$_dk_image" \
+    "docker-docker-proxy:latest" \
+    "docker-proxy-bridge:latest"
+  do
+    _dk_host_docker image inspect -f '{{.Id}}' "$repo" 2>/dev/null >> "$protected_file" || true
+  done
+
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] || continue
+    _dk_host_docker inspect -f '{{.Image}}' "$container_id" 2>/dev/null >> "$protected_file" || true
+  done < <(_dk_host_docker ps -aq 2>/dev/null || true)
+
+  _dk_host_docker image ls --no-trunc --filter "label=com.cac-docker-claude.project=true" \
+    --format '{{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null >> "$images_file" || true
+  for repo in \
+    "ghcr.io/zmk112/cac-docker-claude" \
+    "ghcr.io/zmk112/cac-docker" \
+    "ghcr.io/nmhjklnm/cac-docker"
+  do
+    _dk_host_docker image ls --no-trunc "$repo" \
+      --format '{{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null >> "$images_file" || true
+  done
+
+  awk -F '\t' '
+    NR == FNR {
+      if ($1 != "") protected[$1] = 1
+      next
+    }
+    {
+      id=$1; repo=$2; tag=$3; size=$4; created=$5
+      if (id == "" || seen[id "|" repo "|" tag]++) next
+      if (id in protected) next
+      if (repo == "<none>" || tag == "<none>") ref=id
+      else ref=repo ":" tag
+      print ref "\t" repo "\t" tag "\t" size "\t" created
+    }
+  ' "$protected_file" "$images_file"
+
+  rm -f "$protected_file" "$images_file"
+}
+
+_dk_prompt_cleanup_project_images() {
+  local candidates ref repo tag size created removed=0 failed=0
+  candidates="$(_dk_project_image_cleanup_candidates)"
+  [[ -n "$candidates" ]] || return 0
+
+  echo ""
+  _warn "Found old cac-docker-claude images that are not used by current containers."
+  while IFS=$'\t' read -r ref repo tag size created; do
+    [[ -n "$ref" ]] || continue
+    printf '  %s  %s  %s\n' "$ref" "${size:-unknown-size}" "${created:-unknown-age}"
+  done <<< "$candidates"
+
+  if ! _dk_prompt_yes_no "Remove these old project images now?" "N"; then
+    _info "Skipped old image cleanup."
+    return 0
+  fi
+
+  while IFS=$'\t' read -r ref repo tag size created; do
+    [[ -n "$ref" ]] || continue
+    if _dk_host_docker image rm "$ref"; then
+      removed=$((removed + 1))
+    else
+      failed=$((failed + 1))
+    fi
+  done <<< "$candidates"
+
+  if [[ "$failed" -eq 0 ]]; then
+    _ok "Removed ${removed} old project image(s)"
+  else
+    _warn "Removed ${removed} old project image(s); ${failed} image(s) could not be removed"
+  fi
 }
 
 _dk_cmd_rebuild() {
@@ -659,6 +758,7 @@ _dk_cmd_rebuild() {
   else
     _info "Next: \033[1mcac docker start\033[0m"
   fi
+  _dk_prompt_cleanup_project_images
 }
 
 _dk_cmd_enter() {
@@ -905,10 +1005,10 @@ Usage: cac docker <subcommand>
 
   setup      Configure proxy and network (interactive)
   create     Build or pull the image
-  rebuild    Force rebuild image and recreate container if needed
-  start      Start the container
+  rebuild    Force rebuild, recreate if needed, then offer old-image cleanup
+  start      Start the container; no-op if already running
   stop       Stop the container
-  restart    Restart the container
+  restart    Restart and remount the current directory as /workspace
   enter      Shell into the container
   mount      Manage extra host-directory mounts
   check      Diagnostics (network + identity)
