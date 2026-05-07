@@ -1,38 +1,68 @@
 # cac-docker-claude
 
+[![Latest release](https://img.shields.io/github/v/release/ZMK112/cac-docker-claude?sort=semver)](https://github.com/ZMK112/cac-docker-claude/releases/latest)
+[![License](https://img.shields.io/github/license/ZMK112/cac-docker-claude)](LICENSE)
+[![Docker Compose](https://img.shields.io/badge/Docker%20Compose-required-2496ED)](https://docs.docker.com/compose/)
+[![sing-box](https://img.shields.io/badge/network-sing--box%20TUN-00A3FF)](https://sing-box.sagernet.org/)
+
 Docker-only Claude Code runtime for isolated, proxy-controlled Claude Code workspaces.
 
 `cac-docker-claude` provides a reproducible Docker workspace for Claude Code with sing-box TUN routing, chained proxy support, persistent Claude state, local image builds, SSH/Web access, and safe stable upgrades.
 
 中文：`cac-docker-claude` 是从原 `cac` 项目拆分出来的 Docker 专用版本。它只保留 `cac docker ...` 工作流，用 Docker 容器运行 Claude Code，并通过 sing-box TUN 把容器网络流量纳入代理和规则控制，同时保留 Claude 登录状态、个性化数据和工作区数据。
 
+## Why This Project
+
+Running Claude Code inside a container is useful only if the runtime stays predictable: network traffic must follow the intended proxy path, Claude state must survive rebuilds, and updates must not disrupt a working environment. This project focuses on that Docker runtime layer and keeps the command surface intentionally small.
+
 ## Highlights
 
-- **Docker-first runtime**: one focused command surface, `cac docker ...`.
-- **Network isolation**: main container traffic goes through sing-box TUN; internal Docker/LAN routes can stay direct.
-- **Proxy-chain migration**: Mihomo YAML chain configs can be converted into sing-box runtime config.
-- **Safe persistence**: Claude credentials, personalization, home data, mounts, and Docker settings live under `~/.cac/docker`.
-- **Local source builds**: stable installs include the full source tree under `~/.cac/source`, so runtime images can be rebuilt locally.
-- **Operational access**: optional SSH, Web UI, Docker socket proxy, child-container proxy bridge, zsh/Oh My Zsh, tmux defaults, and extra mounts.
-- **Stable updates with rollback**: `cac docker update` installs the latest stable release and preserves existing state.
+| Area | What it does |
+| --- | --- |
+| Runtime | Docker-only command surface: `cac docker ...` |
+| Network | sing-box TUN isolation for the main container, with direct internal Docker/LAN routes where needed |
+| Proxy chains | Mihomo YAML chain configs can be converted into sing-box runtime config |
+| Persistence | Claude credentials, personalization, home data, mounts, and Docker settings live under `~/.cac/docker` |
+| Builds | Stable installs include full source under `~/.cac/source`, so images can be rebuilt locally |
+| Access | Optional SSH, Web UI, Docker socket proxy, child-container proxy bridge, zsh, tmux, and extra mounts |
+| Updates | `cac docker update` installs the latest stable release with rollback behavior |
 
-## What It Provides
+## Components
 
-- Docker-only command surface: `cac docker ...`
-- sing-box TUN isolation for the main runtime container
-- Mihomo YAML chain conversion for chained proxy setups
-- Direct rules for internal Docker/LAN traffic while keeping external traffic behind TUN
-- Persistent Claude/container state under `~/.cac/docker`
-- Full source install under `~/.cac/source`, so images can be built locally
-- Stable update command with rollback behavior
-- Optional zsh, Oh My Zsh, plugins, and tmux defaults inside the container
-- Web UI, SSH, Docker socket proxy, child-container proxy bridge, and extra mount management
+| Component | Purpose |
+| --- | --- |
+| Main container | Claude Code runtime, Web UI, SSH, shell environment, and sing-box TUN |
+| Gateway/docker-proxy | Controlled Docker API path for Docker commands inside the runtime |
+| Proxy bridge | Proxy endpoint for child containers created from inside the runtime |
+| Docker resources | Compose files, generated mounts, proxy config, and persistent data under `~/.cac/docker` |
 
 Non-Docker cac features such as `cac env`, `cac claude`, local relay mode, and local fingerprint-hook environments are not part of this project.
 
 ## Project Scope
 
 This project is intentionally narrow: it manages the Docker-based Claude Code runtime only. It does not replace Docker itself, does not expose the old local `cac` workflows, and does not delete existing Claude data during normal install, update, rebuild, start, stop, or restart operations.
+
+## Contents
+
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [Common Commands](#common-commands)
+- [Mounts](#mounts)
+- [Proxy Modes](#proxy-modes)
+- [Network Model](#network-model)
+- [Local Builds](#local-builds)
+- [Data Layout](#data-layout)
+- [zsh and tmux](#zsh-and-tmux)
+- [Web UI and Access](#web-ui-and-access)
+- [Troubleshooting](#troubleshooting)
+- [Release](#release)
+
+## Requirements
+
+- Docker with Docker Compose v2.
+- `bash`, `curl`, `git`, and standard Unix shell tools on the host.
+- A host environment that can run privileged containers with `/dev/net/tun`.
+- A working proxy endpoint or a Mihomo YAML file if external traffic must go through a chained proxy.
 
 ## Install
 
@@ -227,7 +257,7 @@ Important paths:
 
 Release zip files and temporary install directories are not needed after installation. The installer removes its temporary files automatically.
 
-## zsh And tmux
+## zsh and tmux
 
 When zsh is selected during setup, the container can initialize:
 
@@ -239,7 +269,7 @@ When zsh is selected during setup, the container can initialize:
 
 The default tmux config includes mouse support, `C-a` prefix, vim-style pane movement/resize, vi copy mode, Claude Code terminal title handling, pane title borders, and a compact status bar.
 
-## Web UI And Access
+## Web UI and Access
 
 If enabled during setup, the Web UI is exposed on the configured local port, normally:
 
