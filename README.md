@@ -22,9 +22,9 @@ Non-Docker cac features such as `cac env`, `cac claude`, local relay mode, and l
 
 Install the latest stable release:
 
-Migration note: this installer and updater preserve existing Claude login state, personalization data, Docker settings, mounts, and container home data under `~/.cac/docker`. Images and containers may be rebuilt during install or update, but user data is kept and you normally do not need to log in to Claude again.
+Migration note: this installer and updater preserve existing Claude login state, personalization data, Docker settings, mounts, and container home data under `~/.cac/docker`. Install and update leave existing containers running by default; rebuild images explicitly when you are ready. User data is kept and you normally do not need to log in to Claude again.
 
-中文提示：执行下面的一键安装或升级命令不会删除已有 Claude 登录信息、个性化配置、项目数据、挂载配置和 Docker 运行数据。迁移是安全的；安装或升级过程中可能会重建镜像/容器，但不会因此要求重复登录。
+中文提示：执行下面的一键安装或升级命令不会删除已有 Claude 登录信息、个性化配置、项目数据、挂载配置和 Docker 运行数据。迁移是安全的；安装和升级默认不会停止正在运行的旧容器，需要时再手动重建镜像/容器，不会因此要求重复登录。
 
 ```bash
 curl -fsSL https://github.com/ZMK112/cac-docker-claude/releases/latest/download/install-stable.sh | bash
@@ -67,6 +67,8 @@ Update to the latest stable release:
 
 ```bash
 cac docker update
+CAC_DOCKER_REBUILD=1 cac docker create
+cac docker start
 ```
 
 ## Common Commands
@@ -165,7 +167,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.8
+ghcr.io/zmk112/cac-docker-claude:v0.1.9
 ```
 
 Force a rebuild:
@@ -279,14 +281,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.8 bash scripts/package-source.sh
+PKG_VERSION=v0.1.9 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.8.zip
-dist/cac-docker-claude-source-v0.1.8.sha256
+dist/cac-docker-claude-source-v0.1.9.zip
+dist/cac-docker-claude-source-v0.1.9.sha256
 scripts/install-stable.sh
 ```
 

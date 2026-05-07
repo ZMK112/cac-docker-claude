@@ -169,18 +169,38 @@ link_entrypoint() {
 
 copy_if_present() {
     local src="$1" dst="$2"
+    local parent base tmp
     [[ -e "$src" || -L "$src" ]] || return 0
+    parent="$(dirname "$dst")"
+    base="$(basename "$dst")"
+    tmp="${parent}/.${base}.$$.new"
+    mkdir -p "$parent"
+    rm -rf "$tmp"
+    if ! cp -pR "$src" "$tmp"; then
+        rm -rf "$tmp"
+        return 1
+    fi
     rm -rf "$dst"
-    cp -pR "$src" "$dst"
+    mv "$tmp" "$dst"
 }
 
 copy_if_present_with_progress() {
     local src="$1" dst="$2" label="$3"
+    local parent base tmp
     [[ -e "$src" || -L "$src" ]] || return 0
-    rm -rf "$dst"
+    parent="$(dirname "$dst")"
+    base="$(basename "$dst")"
+    tmp="${parent}/.${base}.$$.new"
+    mkdir -p "$parent"
+    rm -rf "$tmp"
     echo "$label ..."
-    cp -pR "$src" "$dst" &
-    wait_with_progress "$label" "$!"
+    cp -pR "$src" "$tmp" &
+    if ! wait_with_progress "$label" "$!"; then
+        rm -rf "$tmp"
+        return 1
+    fi
+    rm -rf "$dst"
+    mv "$tmp" "$dst"
 }
 
 docker_state_exists() {
@@ -276,10 +296,20 @@ sync_docker_resources() {
         return 1
     fi
 
-    copy_if_present "${state_dir}/.env" "${target_dir}/.env"
-    copy_if_present_with_progress "${state_dir}/data" "${target_dir}/data" "Restoring Docker data"
-    copy_if_present "${state_dir}/mounts.json" "${target_dir}/mounts.json"
-    copy_if_present "${state_dir}/docker-compose.mounts.yml" "${target_dir}/docker-compose.mounts.yml"
+    if ! {
+        copy_if_present "${state_dir}/.env" "${target_dir}/.env" &&
+        copy_if_present_with_progress "${state_dir}/data" "${target_dir}/data" "Restoring Docker data" &&
+        copy_if_present "${state_dir}/mounts.json" "${target_dir}/mounts.json" &&
+        copy_if_present "${state_dir}/docker-compose.mounts.yml" "${target_dir}/docker-compose.mounts.yml"
+    }; then
+        if [[ -n "$old_link_backup" && -L "$old_link_backup" ]]; then
+            rm -rf "$target_dir"
+            mv "$old_link_backup" "$target_dir"
+            yellow "Docker state restore failed; restored old ${target_dir} symlink."
+        fi
+        yellow "Preserved Docker state backup: ${state_dir}"
+        return 1
+    fi
     if docker_state_exists "$state_dir"; then
         cyan "Migrated existing Docker state into ${target_dir}"
         if [[ -n "$old_link_target" ]]; then
@@ -324,10 +354,20 @@ link_source_docker_resources() {
         fi
     fi
 
-    copy_if_present "${state_dir}/.env" "${source_abs}/.env"
-    copy_if_present_with_progress "${state_dir}/data" "${source_abs}/data" "Restoring Docker data"
-    copy_if_present "${state_dir}/mounts.json" "${source_abs}/mounts.json"
-    copy_if_present "${state_dir}/docker-compose.mounts.yml" "${source_abs}/docker-compose.mounts.yml"
+    if ! {
+        copy_if_present "${state_dir}/.env" "${source_abs}/.env" &&
+        copy_if_present_with_progress "${state_dir}/data" "${source_abs}/data" "Restoring Docker data" &&
+        copy_if_present "${state_dir}/mounts.json" "${source_abs}/mounts.json" &&
+        copy_if_present "${state_dir}/docker-compose.mounts.yml" "${source_abs}/docker-compose.mounts.yml"
+    }; then
+        if [[ -n "$old_backup" && ( -e "$old_backup" || -L "$old_backup" ) ]]; then
+            rm -f "$target_dir"
+            mv "$old_backup" "$target_dir"
+            yellow "Docker state restore failed; restored old ${target_dir}."
+        fi
+        yellow "Preserved Docker state backup: ${state_dir}"
+        return 1
+    fi
     if docker_state_exists "$state_dir"; then
         cyan "Migrated existing Docker state into ${target_dir}"
         if [[ -n "$old_link_target" ]]; then
@@ -436,7 +476,7 @@ print_docker_data_preserve_notice() {
         cyan "No existing Claude login/session data detected yet."
     fi
 
-    yellow "Install / rebuild refreshes containers and images, but does not delete this data directory."
+    yellow "Install/update leave existing containers running by default; explicit rebuilds do not delete this data directory."
     yellow "A full reset must be done manually after backup if you really want to erase Claude credentials/history."
 }
 
@@ -505,7 +545,7 @@ refresh_existing_docker_stack() {
     yellow "Retry manually from your workspace:"
     printf '  cd %s\n' "$workspace_dir"
     printf '  CAC_DOCKER_REBUILD=1 cac docker create && cac docker start\n'
-    return 0
+    return 1
 }
 
 write_identity_files() {
@@ -690,7 +730,11 @@ main() {
     install_docker_resources
     print_docker_data_preserve_notice
     initialize_cac
-    refresh_existing_docker_stack
+    if [[ "${CAC_INSTALL_REFRESH_STACK:-0}" == "1" ]]; then
+        refresh_existing_docker_stack
+    else
+        cyan "Skipping automatic Docker stack refresh; existing containers are left untouched."
+    fi
     print_completion
 }
 
