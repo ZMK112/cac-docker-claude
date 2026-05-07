@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+# cac-docker network + identity diagnostics.
+set -uo pipefail
+
+PASS="\033[32mok\033[0m"
+FAIL="\033[31mFAIL\033[0m"
+INFO="\033[36minfo\033[0m"
+errors=0
+
+PERSONA_HOME="${CAC_HOME:-${CAC_FAKE_HOME:-/home/${CAC_RUNTIME_USER:-${CAC_FAKE_USER:-cherny}}}}"
+[ -d "$PERSONA_HOME" ] && export HOME="$PERSONA_HOME"
+if [ -f "$HOME/.cac-env" ]; then
+  # shellcheck disable=SC1090
+  . "$HOME/.cac-env"
+fi
+PERSONA_HOME="${CAC_HOME:-$HOME}"
+export HOME="$PERSONA_HOME"
+if [ -d "$HOME/.cac/shim-bin" ]; then
+  PATH="$HOME/.cac/shim-bin:$PATH"
+  export PATH
+fi
+
+current_profile() {
+  cat "${CAC_HOME:-$HOME}/.cac/current" 2>/dev/null || true
+}
+
+profile_file() {
+  local current
+  current="$(current_profile)"
+  [[ -n "$current" ]] || return 1
+  printf '%s\n' "${CAC_HOME:-$HOME}/.cac/envs/$current/$1"
+}
+
+read_profile_value() {
+  local file
+  file="$(profile_file "$1")" || return 1
+  [[ -f "$file" ]] || return 1
+  tr -d '\r\n' < "$file"
+}
+
+run_check() {
+  local label="$1" hint="$2"
+  shift 2
+  local start end ms output
+  start=$(date +%s%N)
+  if output=$("$@" 2>&1); then
+    end=$(date +%s%N)
+    ms=$(( (end - start) / 1000000 ))
+    printf "[%-5s] $PASS  %s (%dms)\n" "$label" "$output" "$ms"
+  else
+    printf "[%-5s] $FAIL  %s\n" "$label" "${output:-$hint}"
+    errors=$((errors + 1))
+  fi
+}
+
+run_info_check() {
+  local label="$1" hint="$2"
+  shift 2
+  local start end ms output
+  start=$(date +%s%N)
+  if output=$("$@" 2>&1); then
+    end=$(date +%s%N)
+    ms=$(( (end - start) / 1000000 ))
+    printf "[%-5s] $INFO %s (%dms)\n" "$label" "$output" "$ms"
+  else
+    end=$(date +%s%N)
+    ms=$(( (end - start) / 1000000 ))
+    printf "[%-5s] $INFO %s (%dms)\n" "$label" "${output:-$hint}" "$ms"
+  fi
+}
+
+# ── Network checks ──────────────────────────────────────────────────
+
+check_tun() {
+  ip -o link show tun0 >/dev/null 2>&1 && echo "tun0 up"
+}
+
+check_dns() {
+  timeout 5 getent hosts google.com >/dev/null && echo "google.com resolved"
+}
+
+check_leak() {
+  local ns
+  ns=$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf 2>/dev/null)
+  [ -z "$ns" ] && { echo "no nameserver"; return 1; }
+  local tun_net
+  tun_net=$(ip -4 addr show tun0 2>/dev/null | awk '/inet/{print $2; exit}')
+  [ -z "$tun_net" ] && { echo "tun0 has no address"; return 1; }
+  local tun_prefix="${tun_net%.*}" ns_prefix="${ns%.*}"
+  if [ "$tun_prefix" = "$ns_prefix" ]; then
+    echo "DNS → $ns (TUN gateway, no leak)"
+  else
+    echo "DNS → $ns (NOT on TUN network — possible leak)"
+    return 1
+  fi
+}
+
+check_tcp() {
+  timeout 5 bash -c 'echo >/dev/tcp/google.com/443' 2>/dev/null && echo "google.com:443 reachable"
+}
+
+check_http() {
+  local code
+  code=$(timeout 10 curl -sL -o /dev/null -w "%{http_code}" https://www.google.com 2>/dev/null)
+  if [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 500 ]; then
+    echo "https://www.google.com → $code"
+  else
+    return 1
+  fi
+}
+
+check_exit_ip() {
+  local ip
+  ip=$(timeout 10 curl -sf https://ifconfig.me 2>/dev/null || true)
+  if [ -n "$ip" ]; then
+    echo "$ip"
+  else
+    return 1
+  fi
+}
+
+check_geo() {
+  local tz="${TZ:-not set}"
+  local lang="${LANG:-not set}"
+  local accept="${ACCEPT_LANGUAGE:-not set}"
+  local geo
+  geo="$(python3 - <<'PY'
+from ccimage.geo import detect
+info = detect() or {}
+print("|".join([
+    info.get("country_code", ""),
+    info.get("country", ""),
+    info.get("ip", ""),
+]))
+PY
+  )" || return 1
+
+  local country_code country_name exit_ip
+  IFS='|' read -r country_code country_name exit_ip <<<"$geo"
+  [[ -n "$country_code" ]] || return 1
+  if [[ "$country_code" == "CN" ]]; then
+    echo "CC=CN (${country_name:-China}) exit=${exit_ip:-unknown} TZ=$tz LANG=$lang Accept=$accept"
+    return 1
+  fi
+  echo "CC=${country_code} (${country_name:-unknown}) exit=${exit_ip:-unknown} TZ=$tz LANG=$lang Accept=$accept"
+}
+
+check_proxy_speed() {
+  local stats
+  stats=$(timeout 20 curl -L -sS -o /dev/null \
+    -w '%{size_download}|%{time_total}|%{speed_download}' \
+    'https://speed.cloudflare.com/__down?bytes=1048576' 2>/dev/null || true)
+  [[ -n "$stats" ]] || return 1
+
+  python3 - "$stats" <<'PY'
+import sys
+
+size_s, time_s, speed_s = sys.argv[1].split("|")
+size = float(size_s or 0)
+elapsed = float(time_s or 0)
+speed = float(speed_s or 0)
+if size <= 0 or elapsed <= 0 or speed <= 0:
+    raise SystemExit(1)
+
+def fmt_bytes(value: float) -> str:
+    units = ["B", "KiB", "MiB", "GiB"]
+    idx = 0
+    while value >= 1024 and idx < len(units) - 1:
+        value /= 1024
+        idx += 1
+    return f"{value:.2f} {units[idx]}"
+
+print(f"{fmt_bytes(size)} in {elapsed:.2f}s ({fmt_bytes(speed)}/s)")
+PY
+}
+
+check_workspace_write() {
+  local probe="/workspace/.cac-write-check.$$"
+  printf 'ok\n' >"$probe" || return 1
+  rm -f "$probe" || return 1
+  echo "/workspace writable"
+}
+
+# ── Identity checks (cac) ───────────────────────────────────────────
+
+check_cac() {
+  if [ -d "${CAC_HOME:-$HOME}/.cac" ]; then
+    local current
+    current=$(cat "${CAC_HOME:-$HOME}/.cac/current" 2>/dev/null || echo "none")
+    echo "installed, profile: $current"
+  else
+    echo "not installed"
+    return 1
+  fi
+}
+
+check_hostname() {
+  local spoofed_hn current current_hn actual_hn
+  spoofed_hn="${CAC_HOSTNAME:-}"
+  current=$(cat "$HOME/.cac/current" 2>/dev/null || echo "")
+  [ -z "$current" ] && current=$(cat "${CAC_HOME:-$HOME}/.cac/current" 2>/dev/null || echo "")
+  current_hn=""
+  actual_hn="$(hostname 2>/dev/null || true)"
+
+  if [ -n "$current" ] && [ -f "${CAC_HOME:-$HOME}/.cac/envs/$current/hostname" ]; then
+    current_hn=$(tr -d '[:space:]' < "${CAC_HOME:-$HOME}/.cac/envs/$current/hostname")
+  fi
+
+  if [ -z "$spoofed_hn" ]; then
+    spoofed_hn="$current_hn"
+  fi
+
+  if [ -z "$spoofed_hn" ]; then
+    if [ -z "$current" ]; then
+      echo "no profile active — restart the Docker stack"
+    else
+      echo "not spoofed"
+      return 1
+    fi
+  fi
+
+  if [ -n "$actual_hn" ] && [ "$actual_hn" != "$spoofed_hn" ]; then
+    echo "hostname mismatch: actual=$actual_hn expected=$spoofed_hn"
+    return 1
+  fi
+
+  echo "spoofed: $spoofed_hn"
+}
+
+check_persona() {
+  local expected_user expected_uid expected_gid expected_home expected_shell actual_user actual_uid actual_gid actual_home actual_shell node_info
+  expected_user="$(read_profile_value username)" || return 1
+  expected_uid="$(read_profile_value uid)" || return 1
+  expected_gid="$(read_profile_value gid)" || return 1
+  expected_home="$(read_profile_value home_dir)" || return 1
+  expected_shell="$(read_profile_value shell_path)" || return 1
+
+  actual_user="$(whoami 2>/dev/null || true)"
+  actual_uid="$(id -u 2>/dev/null || true)"
+  actual_gid="$(id -g 2>/dev/null || true)"
+  actual_home="${HOME:-}"
+  actual_shell="${SHELL:-}"
+
+  [[ "$actual_user" == "$expected_user" ]] || return 1
+  [[ "$actual_uid" == "$expected_uid" ]] || return 1
+  [[ "$actual_gid" == "$expected_gid" ]] || return 1
+  [[ "$actual_home" == "$expected_home" ]] || return 1
+  [[ "$actual_shell" == "$expected_shell" ]] || return 1
+
+  node_info=$(
+    CAC_USERNAME="$expected_user" \
+    CAC_UID="$expected_uid" \
+    CAC_GID="$expected_gid" \
+    CAC_HOME="$expected_home" \
+    CAC_SHELL="$expected_shell" \
+    NODE_OPTIONS="--require /usr/local/bin/fingerprint-hook.js" \
+    node -e "const os=require('os'); process.stdout.write([os.homedir(), process.getuid(), process.getgid()].join('|'))" 2>/dev/null
+  ) || return 1
+
+  [[ "$node_info" == "$expected_home|$expected_uid|$expected_gid" ]] || return 1
+  echo "$expected_user uid=$expected_uid home=$expected_home"
+}
+
+check_kernel_mask() {
+  local expected_type expected_release actual_uname node_uname
+  expected_type="$(read_profile_value os_type)" || return 1
+  expected_release="$(read_profile_value os_release)" || return 1
+
+  actual_uname="$(uname -sr 2>/dev/null || true)"
+  [[ "$actual_uname" == "$expected_type $expected_release" ]] || return 1
+
+  node_uname=$(
+    CAC_OS_TYPE="$expected_type" \
+    CAC_OS_RELEASE="$expected_release" \
+    NODE_OPTIONS="--require /usr/local/bin/fingerprint-hook.js" \
+    node -e "const os=require('os'); process.stdout.write(os.type() + ' ' + os.release())" 2>/dev/null
+  ) || return 1
+  [[ "$node_uname" == "$expected_type $expected_release" ]] || return 1
+  echo "$actual_uname"
+}
+
+check_distro_mask() {
+  local expected_id expected_version os_release_text node_release_text
+  expected_id="$(read_profile_value linux_distro_id)" || return 1
+  expected_version="$(read_profile_value linux_distro_version)" || return 1
+
+  os_release_text="$(cat /etc/os-release 2>/dev/null || true)"
+  grep -q "^ID=${expected_id}$" <<<"$os_release_text" || return 1
+  grep -q "^VERSION_ID=\"${expected_version}\"$" <<<"$os_release_text" || return 1
+
+  node_release_text=$(
+    CAC_LINUX_DISTRO_ID="$expected_id" \
+    CAC_LINUX_DISTRO_VERSION="$expected_version" \
+    CAC_OS_PRETTY_NAME="$(read_profile_value os_pretty_name 2>/dev/null || echo "")" \
+    CAC_OS_VERSION="$(read_profile_value os_version 2>/dev/null || echo "")" \
+    NODE_OPTIONS="--require /usr/local/bin/fingerprint-hook.js" \
+    node -e "const fs=require('fs'); process.stdout.write(fs.readFileSync('/etc/os-release','utf8'))" 2>/dev/null
+  ) || return 1
+  grep -q "^ID=${expected_id}$" <<<"$node_release_text" || return 1
+  grep -q "^VERSION_ID=\"${expected_version}\"$" <<<"$node_release_text" || return 1
+  echo "ID=${expected_id} VERSION_ID=${expected_version}"
+}
+
+check_pid1_user() {
+  local expected_uid expected_gid actual_uid actual_gid
+  expected_uid="$(read_profile_value uid 2>/dev/null || true)"
+  expected_gid="$(read_profile_value gid 2>/dev/null || true)"
+  [[ -z "$expected_uid" ]] && expected_uid="${CAC_EFFECTIVE_UID:-}"
+  [[ -z "$expected_gid" ]] && expected_gid="${CAC_EFFECTIVE_GID:-}"
+  [ -n "$expected_uid" ] || return 1
+  [ -n "$expected_gid" ] || return 1
+
+  actual_uid="$(awk '/^Uid:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
+  actual_gid="$(awk '/^Gid:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
+  [[ -n "$actual_uid" && "$actual_uid" != "0" ]] || return 1
+  [[ "$actual_uid" == "$expected_uid" ]] || return 1
+  [[ "$actual_gid" == "$expected_gid" ]] || return 1
+  echo "pid1 uid=${actual_uid} gid=${actual_gid}"
+}
+
+check_sudo_access() {
+  local sudo_uid
+  command -v sudo >/dev/null 2>&1 || return 1
+  sudo_uid="$(sudo -n id -u 2>/dev/null || true)"
+  [[ "$sudo_uid" == "0" ]] || return 1
+  echo "passwordless sudo available"
+}
+
+check_sshd() {
+  local port="${CAC_SSH_CONTAINER_PORT:-22}"
+  command -v sshd >/dev/null 2>&1 || return 1
+  pgrep -x sshd >/dev/null 2>&1 || return 1
+  grep -q '^PasswordAuthentication yes$' /etc/ssh/sshd_config.d/cac.conf 2>/dev/null || return 1
+  grep -q '^PubkeyAuthentication yes$' /etc/ssh/sshd_config.d/cac.conf 2>/dev/null || return 1
+  grep -q '^AuthorizedKeysFile .ssh/authorized_keys$' /etc/ssh/sshd_config.d/cac.conf 2>/dev/null || return 1
+  timeout 3 bash -lc "echo >/dev/tcp/127.0.0.1/${port}" 2>/dev/null || return 1
+  echo "sshd listening on ${port} with password+pubkey auth"
+}
+
+check_container_traces() {
+  local cgroup_text mountinfo_text
+  [ ! -e /.dockerenv ] || return 1
+  [ ! -e /run/.containerenv ] || return 1
+  cgroup_text="$(cat /proc/1/cgroup 2>/dev/null || true)"
+  mountinfo_text="$(cat /proc/1/mountinfo 2>/dev/null || true)"
+  ! grep -qiE 'docker|containerd|kubepods|libpod' <<<"$cgroup_text" || return 1
+  ! grep -qiE 'docker|containerd|kubepods|libpod|overlay' <<<"$mountinfo_text" || return 1
+  echo "no docker markers in cgroup/mountinfo"
+}
+
+# ── Run all checks ──────────────────────────────────────────────────
+
+printf "\033[1mNetwork\033[0m\n"
+run_check "TUN"   "tun0 not found — check SINGBOX_ENABLE=1 and NET_ADMIN capability" check_tun
+run_check "DNS"   "DNS resolution failed — check DNS_SERVER" check_dns
+run_check "LEAK"  "DNS may be leaking — resolv.conf not pointing to TUN" check_leak
+run_check "TCP"   "TCP connect failed — check proxy address and credentials" check_tcp
+run_check "HTTP"  "HTTP request failed — check TLS and proxy config" check_http
+run_check "EXIT"  "Cannot determine exit IP" check_exit_ip
+run_check "GEO"   "Timezone/locale not set" check_geo
+run_info_check "SPD" "proxy speed unavailable" check_proxy_speed
+run_check "WS"    "Workspace is not writable by runtime user" check_workspace_write
+
+echo ""
+printf "\033[1mIdentity\033[0m\n"
+run_check "CAC"   "cac profile/runtime missing — restart the Docker stack" check_cac
+run_check "HOST"  "Hostname not spoofed" check_hostname
+run_check "USER"  "User/home persona not spoofed" check_persona
+run_check "PID1"  "Main process still running as root" check_pid1_user
+run_check "SUDO"  "Runtime user cannot sudo without a password" check_sudo_access
+run_check "SSHD"  "SSH server is not listening inside the container" check_sshd
+run_check "UNAME" "Kernel version not spoofed" check_kernel_mask
+run_check "DIST"  "Linux distro info not spoofed" check_distro_mask
+run_check "TRACE" "Container markers still visible" check_container_traces
+
+echo ""
+if [ "$errors" -eq 0 ]; then
+  printf "\033[32mAll checks passed.\033[0m\n"
+else
+  printf "\033[31m%d check(s) failed.\033[0m\n" "$errors"
+  exit 1
+fi

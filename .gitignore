@@ -1,0 +1,32 @@
+.DS_Store
+.npmrc
+.env
+.env.*
+!.env.example
+node_modules/
+*.swp
+*.swo
+*~
+*.local
+*.log
+*.pid
+*.tmp
+*.pem
+*.pyc
+__pycache__/
+/.cac/
+/.cac-dist/
+/dist/
+
+# build artifacts (root-level copies from src/)
+/fingerprint-hook.js
+/relay.js
+
+# docker
+docker/.env
+docker/.env.*
+docker/mounts.json
+docker/docker-compose.mounts.yml
+/data/
+/docker/data/
+CLAUDE.local.md

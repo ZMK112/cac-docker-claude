@@ -1,0 +1,46 @@
+{
+  "name": "cac-docker-claude",
+  "version": "1.0.0",
+  "description": "Docker-only Claude Code runtime with TUN proxy isolation and local image builds.",
+  "bin": {
+    "cac": "cac"
+  },
+  "files": [
+    "cac",
+    "cac.ps1",
+    "cac.cmd",
+    "scripts/mihomo_chain_to_singbox.py",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {},
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "privacy",
+    "proxy",
+    "docker",
+    "sing-box",
+    "tun",
+    "cli"
+  ],
+  "author": "ZMK112",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZMK112/cac-docker-claude.git"
+  },
+  "homepage": "https://github.com/ZMK112/cac-docker-claude",
+  "bugs": {
+    "url": "https://github.com/ZMK112/cac-docker-claude/issues"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

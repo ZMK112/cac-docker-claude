@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
+PKG_VERSION="${PKG_VERSION:-$(git -C "${ROOT_DIR}" describe --tags --always)}"
+PKG_NAME="${PKG_NAME:-cac-docker-claude-source-${PKG_VERSION}}"
+TMP_DIR="$(mktemp -d)"
+PKG_ROOT="${TMP_DIR}/${PKG_NAME}"
+ZIP_PATH="${OUT_DIR}/${PKG_NAME}.zip"
+SHA_PATH="${OUT_DIR}/${PKG_NAME}.sha256"
+
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+cd "$ROOT_DIR"
+
+mkdir -p "$OUT_DIR"
+
+echo "Building latest cac-docker-claude ..."
+bash build.sh >/dev/null
+
+echo "Collecting full source tree ..."
+rsync -a \
+    --exclude '.git/' \
+    --exclude '.cac/' \
+    --exclude '.cac-dist/' \
+    --exclude 'dist/' \
+    --exclude 'release/' \
+    --exclude 'docker/.env' \
+    --exclude 'docker/mounts.json' \
+    --exclude 'docker/docker-compose.mounts.yml' \
+    --exclude 'docker/data/' \
+    --exclude '__pycache__/' \
+    --exclude '*.pyc' \
+    --exclude '*.pyo' \
+    --exclude '.DS_Store' \
+    "${ROOT_DIR}/" "${PKG_ROOT}/"
+
+echo "Creating source zip archive ..."
+rm -f "$ZIP_PATH" "$SHA_PATH"
+(cd "$TMP_DIR" && zip -qry "$ZIP_PATH" "$PKG_NAME")
+
+echo "Writing checksum ..."
+(cd "$OUT_DIR" && shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$SHA_PATH")")
+
+echo "Created:"
+echo "  $ZIP_PATH"
+echo "  $SHA_PATH"

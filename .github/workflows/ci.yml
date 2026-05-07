@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck -s bash -S warning \
+            src/utils.sh \
+            src/cmd_self.sh \
+            src/cmd_docker_common.sh \
+            src/cmd_docker_runtime.sh \
+            src/cmd_docker_ports.sh \
+            src/cmd_docker.sh \
+            src/cmd_version.sh \
+            src/cmd_help.sh \
+            src/main.sh \
+            build.sh
+
+  build-check:
+    name: Build consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild and check for drift
+        run: |
+          cp cac cac.before
+          bash build.sh
+          if ! diff -q cac.before cac >/dev/null 2>&1; then
+            echo "::error::Built 'cac' differs from committed version. Run 'bash build.sh' and commit the result."
+            diff cac.before cac || true
+            exit 1
+          fi
+          echo "✓ Build output matches committed file"
+
+  validate:
+    name: Docker validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify Docker availability
+        run: |
+          docker version
+          docker compose version
+          test -e /dev/net/tun
+
+      - name: Run validation suite
+        run: bash scripts/validate.sh --suite fast

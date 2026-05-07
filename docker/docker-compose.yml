@@ -1,0 +1,119 @@
+# Base compose — use with docker-compose.macvlan.yml or docker-compose.local.yml
+services:
+  docker-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.socket-proxy
+    container_name: ${CAC_DOCKER_PROXY_NAME:-boris-gateway}
+    volumes:
+      - ${CAC_HOST_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      docker_control:
+        ipv4_address: ${CAC_DOCKER_PROXY_IP:-172.31.255.2}
+    restart: unless-stopped
+
+  proxy-bridge:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.proxy-bridge
+      args:
+        BUILD_PROXY: ${BUILD_PROXY:-}
+    container_name: ${CAC_CHILD_PROXY_BRIDGE_NAME:-boris-child-proxy}
+    environment:
+      PROXY_URI: ${PROXY_URI:?Set PROXY_URI in .env}
+      CAC_PROXY_BRIDGE_CONFIG_B64: ${CAC_PROXY_BRIDGE_CONFIG_B64:-}
+      CAC_CHILD_PROXY_BRIDGE_LISTEN: 0.0.0.0
+      CAC_CHILD_PROXY_BRIDGE_PORT: ${CAC_CHILD_PROXY_BRIDGE_PORT:?Set CAC_CHILD_PROXY_BRIDGE_PORT in .env}
+      CAC_CHILD_PROXY_BRIDGE_USER: ${CAC_CHILD_PROXY_BRIDGE_USER:?Set CAC_CHILD_PROXY_BRIDGE_USER in .env}
+      CAC_CHILD_PROXY_BRIDGE_PASSWORD: ${CAC_CHILD_PROXY_BRIDGE_PASSWORD:?Set CAC_CHILD_PROXY_BRIDGE_PASSWORD in .env}
+    ports:
+      - "${CAC_CHILD_PROXY_BRIDGE_BIND:-0.0.0.0}:${CAC_CHILD_PROXY_BRIDGE_PORT:?Set CAC_CHILD_PROXY_BRIDGE_PORT in .env}:${CAC_CHILD_PROXY_BRIDGE_PORT:?Set CAC_CHILD_PROXY_BRIDGE_PORT in .env}"
+    networks:
+      docker_control:
+        ipv4_address: ${CAC_CHILD_PROXY_BRIDGE_IP:?Set CAC_CHILD_PROXY_BRIDGE_IP in .env}
+    restart: unless-stopped
+
+  cac:
+    image: ${CAC_DOCKER_IMAGE:-ghcr.io/zmk112/cac-docker-claude:v0.1.0}
+    container_name: ${CAC_CONTAINER_NAME:-boris-main}
+    hostname: ${CAC_CONTAINER_RUNTIME_HOSTNAME:-boris-main}
+    depends_on:
+      - docker-proxy
+      - proxy-bridge
+    shm_size: ${CAC_SHM_SIZE:-2g}
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      PROXY_URI: ${PROXY_URI:?Set PROXY_URI in .env}
+      CAC_SINGBOX_CONFIG_B64: ${CAC_SINGBOX_CONFIG_B64:-}
+      SINGBOX_ENABLE: ${SINGBOX_ENABLE:-1}
+      DNS_SERVER: ${DNS_SERVER:-https://1.1.1.1/dns-query}
+      TUN_ADDRESS: ${TUN_ADDRESS:-172.19.0.1/30}
+      TUN_MTU: ${TUN_MTU:-9000}
+      DISABLE_IPV6: ${DISABLE_IPV6:-1}
+      HEALTHCHECK: ${HEALTHCHECK:-1}
+      DOCKER_HOST: ${CAC_CONTAINER_DOCKER_HOST:-tcp://${CAC_DOCKER_PROXY_NAME:-boris-gateway}:2375}
+      CAC_PARENT_CONTAINER_NAME: ${CAC_CONTAINER_NAME:-boris-main}
+      CAC_SHARED_WORKSPACE: /workspace
+      CAC_SHARED_WORKSPACE_HOST: ${CAC_WORKSPACE_HOST:?Set CAC_WORKSPACE_HOST in .env}
+      CAC_CHILD_CONTAINER_NETWORK_MODE: ${CAC_CHILD_CONTAINER_NETWORK_MODE:-bridge}
+      CAC_CHILD_CONTAINER_PROXY_URL: ${CAC_CHILD_CONTAINER_PROXY_URL:-}
+      CAC_CHILD_CONTAINER_HTTP_PROXY_URL: ${CAC_CHILD_CONTAINER_HTTP_PROXY_URL:-}
+      CAC_CHILD_CONTAINER_ALL_PROXY_URL: ${CAC_CHILD_CONTAINER_ALL_PROXY_URL:-}
+      CAC_CHILD_CONTAINER_NO_PROXY: ${CAC_CHILD_CONTAINER_NO_PROXY:-localhost,127.0.0.1,::1,host.docker.internal}
+      CAC_CHILD_CONTAINER_ADD_HOST_GATEWAY: ${CAC_CHILD_CONTAINER_ADD_HOST_GATEWAY:-1}
+      CAC_REAL_DOCKER_BIN: /usr/local/bin/docker-real
+      CAC_ENABLE_SSH: ${CAC_ENABLE_SSH:-1}
+      CAC_SSH_PASSWORD: ${CAC_SSH_PASSWORD:-cherny}
+      CAC_SSH_CONTAINER_PORT: ${CAC_SSH_CONTAINER_PORT:-22}
+      CAC_ENABLE_WEB: ${CAC_ENABLE_WEB:-1}
+      CAC_WEB_PORT: ${CAC_WEB_PORT:-3001}
+      CAC_FAKE_USER: ${CAC_FAKE_USER:-cherny}
+      CAC_FAKE_UID: ${CAC_FAKE_UID:-1001}
+      CAC_FAKE_GID: ${CAC_FAKE_GID:-1001}
+      CAC_FAKE_HOME: ${CAC_FAKE_HOME:-/home/cherny}
+      CAC_FAKE_SHELL: ${CAC_FAKE_SHELL:-/bin/bash}
+      CAC_FAKE_OS_TYPE: ${CAC_FAKE_OS_TYPE:-Linux}
+      CAC_FAKE_OS_RELEASE: ${CAC_FAKE_OS_RELEASE:-6.6.31-boris}
+      CAC_FAKE_OS_VERSION: "${CAC_FAKE_OS_VERSION:-Debian GNU/Linux 12}"
+      CAC_FAKE_OS_PRETTY_NAME: "${CAC_FAKE_OS_PRETTY_NAME:-Debian GNU/Linux 12 (bookworm)}"
+      CAC_FAKE_DISTRO_ID: ${CAC_FAKE_DISTRO_ID:-debian}
+      CAC_FAKE_DISTRO_VERSION: ${CAC_FAKE_DISTRO_VERSION:-12}
+      CAC_FAKE_PROC_VERSION: "${CAC_FAKE_PROC_VERSION:-Linux version 6.6.31-boris builder@cherny SMP PREEMPT_DYNAMIC}"
+      CAC_FAKE_CGROUP_TEXT: "${CAC_FAKE_CGROUP_TEXT:-0::/}"
+      CAC_FAKE_MOUNTINFO_TEXT: "${CAC_FAKE_MOUNTINFO_TEXT:-24 23 0:1 / / rw,relatime - ext4 /dev/root rw}"
+      HOME: ${CAC_FAKE_HOME:-/home/cherny}
+      USER: ${CAC_FAKE_USER:-cherny}
+      LOGNAME: ${CAC_FAKE_USER:-cherny}
+      SHELL: ${CAC_FAKE_SHELL:-/bin/bash}
+      TERM: ${CAC_FAKE_TERM:-xterm-256color}
+    volumes:
+      - ${CAC_DATA:-./data}/root:/root
+      - ${CAC_DATA:-./data}/home:/home
+      - ${CAC_WORKSPACE_HOST:?Set CAC_WORKSPACE_HOST in .env}:/workspace
+    ports:
+      - "${CAC_HOST_SSH_BIND:-0.0.0.0}:${CAC_HOST_SSH_PORT:-2222}:${CAC_SSH_CONTAINER_PORT:-22}"
+      - "${CAC_HOST_WEB_BIND:-0.0.0.0}:${CAC_HOST_WEB_PORT:-3001}:${CAC_WEB_PORT:-3001}"
+    networks:
+      docker_control:
+        ipv4_address: ${CAC_DOCKER_CLIENT_IP:-172.31.255.3}
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "ip link show tun0 >/dev/null 2>&1 && pgrep -x sing-box >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  docker_control:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${CAC_DOCKER_CONTROL_SUBNET:-172.31.255.0/24}
