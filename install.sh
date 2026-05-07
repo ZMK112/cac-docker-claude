@@ -21,6 +21,31 @@ cyan() { printf '\033[36m%s\033[0m\n' "$*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 
+wait_with_progress() {
+    local label="$1" pid="$2" interval="${CAC_INSTALL_PROGRESS_INTERVAL:-5}" elapsed=0 rc=0
+    [[ "$interval" =~ ^[0-9]+$ ]] || interval=5
+    [[ "$interval" -gt 0 ]] || interval=5
+
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        elapsed=$((elapsed + 1))
+        if (( elapsed % interval == 0 )); then
+            cyan "  ${label} still running (${elapsed}s)"
+        fi
+    done
+
+    if wait "$pid"; then
+        green "✓ ${label}"
+        return 0
+    fi
+    rc=$?
+    red "✗ ${label}"
+    return "$rc"
+}
+
 usage() {
     cat <<'EOF'
 Usage: bash install.sh [options]
@@ -102,12 +127,12 @@ run_local_build() {
     [[ "$INSTALL_MODE" == "local" ]] || return 0
     [[ "$NO_BUILD" == "true" ]] && return 0
 
-    printf 'Building local cac ... '
+    echo "Building local cac ..."
     (
         cd "$SCRIPT_DIR"
         bash build.sh >/dev/null
-    )
-    green "✓"
+    ) &
+    wait_with_progress "Building local cac" "$!"
 }
 
 download_remote_asset() {
@@ -123,13 +148,13 @@ install_assets() {
     mkdir -p "$DIST_DIR"
 
     if [[ "$INSTALL_MODE" == "local" ]]; then
-        printf 'Installing from local repo ... '
-        cp "${SCRIPT_DIR}/cac" "${DIST_DIR}/cac"
-        green "✓"
+        echo "Installing from local repo ..."
+        cp "${SCRIPT_DIR}/cac" "${DIST_DIR}/cac" &
+        wait_with_progress "Installing from local repo" "$!"
     else
-        printf 'Downloading cac assets ... '
-        download_remote_asset "cac"
-        green "✓"
+        echo "Downloading cac assets ..."
+        download_remote_asset "cac" &
+        wait_with_progress "Downloading cac assets" "$!"
     fi
 
     chmod +x "${DIST_DIR}/cac"
@@ -145,6 +170,15 @@ copy_if_present() {
     [[ -e "$src" || -L "$src" ]] || return 0
     rm -rf "$dst"
     cp -pR "$src" "$dst"
+}
+
+copy_if_present_with_progress() {
+    local src="$1" dst="$2" label="$3"
+    [[ -e "$src" || -L "$src" ]] || return 0
+    rm -rf "$dst"
+    echo "$label ..."
+    cp -pR "$src" "$dst" &
+    wait_with_progress "$label" "$!"
 }
 
 docker_state_exists() {
@@ -178,7 +212,7 @@ install_source_tree() {
     fi
 
     mkdir -p "$CAC_HOME"
-    printf 'Installing full source tree ... '
+    echo "Installing full source tree ..."
     rsync -a --delete \
         --exclude '.git/' \
         --exclude '.cac/' \
@@ -193,8 +227,8 @@ install_source_tree() {
         --exclude '*.pyc' \
         --exclude '*.pyo' \
         --exclude '.DS_Store' \
-        "${SCRIPT_DIR}/" "${SOURCE_DIR}/"
-    green "✓"
+        "${SCRIPT_DIR}/" "${SOURCE_DIR}/" &
+    wait_with_progress "Installing full source tree" "$!"
 }
 
 sync_docker_resources() {
@@ -209,7 +243,7 @@ sync_docker_resources() {
             fi
         fi
         copy_if_present "${target_dir}/.env" "${state_dir}/.env"
-        copy_if_present "${target_dir}/data" "${state_dir}/data"
+        copy_if_present_with_progress "${target_dir}/data" "${state_dir}/data" "Backing up Docker data"
         copy_if_present "${target_dir}/mounts.json" "${state_dir}/mounts.json"
         copy_if_present "${target_dir}/docker-compose.mounts.yml" "${state_dir}/docker-compose.mounts.yml"
     fi
@@ -220,7 +254,8 @@ sync_docker_resources() {
     fi
     mkdir -p "$target_dir"
 
-    if ! rsync -a --delete \
+    echo "Syncing Docker resources ..."
+    rsync -a --delete \
         --exclude '.env' \
         --exclude 'data/' \
         --exclude 'mounts.json' \
@@ -228,7 +263,8 @@ sync_docker_resources() {
         --exclude '__pycache__/' \
         --exclude '*.pyc' \
         --exclude '*.pyo' \
-        "${source_dir}/" "${target_dir}/"; then
+        "${source_dir}/" "${target_dir}/" &
+    if ! wait_with_progress "Syncing Docker resources" "$!"; then
         if [[ -n "$old_link_backup" && -L "$old_link_backup" ]]; then
             rm -rf "$target_dir"
             mv "$old_link_backup" "$target_dir"
@@ -239,7 +275,7 @@ sync_docker_resources() {
     fi
 
     copy_if_present "${state_dir}/.env" "${target_dir}/.env"
-    copy_if_present "${state_dir}/data" "${target_dir}/data"
+    copy_if_present_with_progress "${state_dir}/data" "${target_dir}/data" "Restoring Docker data"
     copy_if_present "${state_dir}/mounts.json" "${target_dir}/mounts.json"
     copy_if_present "${state_dir}/docker-compose.mounts.yml" "${target_dir}/docker-compose.mounts.yml"
     if docker_state_exists "$state_dir"; then
@@ -264,7 +300,7 @@ link_source_docker_resources() {
             old_link_target="$(readlink "$target_dir" || true)"
         fi
         copy_if_present "${target_dir}/.env" "${state_dir}/.env"
-        copy_if_present "${target_dir}/data" "${state_dir}/data"
+        copy_if_present_with_progress "${target_dir}/data" "${state_dir}/data" "Backing up Docker data"
         copy_if_present "${target_dir}/mounts.json" "${state_dir}/mounts.json"
         copy_if_present "${target_dir}/docker-compose.mounts.yml" "${state_dir}/docker-compose.mounts.yml"
         target_abs="$(cd "$target_dir" 2>/dev/null && pwd -P || true)"
@@ -287,7 +323,7 @@ link_source_docker_resources() {
     fi
 
     copy_if_present "${state_dir}/.env" "${source_abs}/.env"
-    copy_if_present "${state_dir}/data" "${source_abs}/data"
+    copy_if_present_with_progress "${state_dir}/data" "${source_abs}/data" "Restoring Docker data"
     copy_if_present "${state_dir}/mounts.json" "${source_abs}/mounts.json"
     copy_if_present "${state_dir}/docker-compose.mounts.yml" "${source_abs}/docker-compose.mounts.yml"
     if docker_state_exists "$state_dir"; then

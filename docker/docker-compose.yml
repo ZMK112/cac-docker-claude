@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
 
   cac:
-    image: ${CAC_DOCKER_IMAGE:-ghcr.io/zmk112/cac-docker-claude:v0.1.6}
+    image: ${CAC_DOCKER_IMAGE:-ghcr.io/zmk112/cac-docker-claude:v0.1.7}
     container_name: ${CAC_CONTAINER_NAME:-boris-main}
     hostname: ${CAC_CONTAINER_RUNTIME_HOSTNAME:-boris-main}
     depends_on:
