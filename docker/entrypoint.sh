@@ -523,7 +523,7 @@ detect_runtime_identity() {
 prepare_runtime_user() {
   detect_runtime_identity
 
-  local current_uid current_gid current_group_name target_group_name
+  local current_uid current_gid current_group_name target_group_name owner_marker desired_owner current_owner
   current_uid="$(id -u "$CAC_FAKE_USER" 2>/dev/null || echo "$CAC_FAKE_UID")"
   current_gid="$(id -g "$CAC_FAKE_USER" 2>/dev/null || echo "$CAC_FAKE_GID")"
   current_group_name="$(id -gn "$CAC_FAKE_USER" 2>/dev/null || echo "$CAC_FAKE_USER")"
@@ -544,8 +544,15 @@ prepare_runtime_user() {
 
   usermod -s "$CAC_FAKE_SHELL" "$CAC_FAKE_USER" 2>/dev/null || true
 
-  chown -R "$CURRENT_RUNTIME_UID:$CURRENT_RUNTIME_GID" "$PROFILE_HOME" 2>/dev/null || true
-  [[ -d "$PROFILE_HOME/.cac" ]] && chown -R "$CURRENT_RUNTIME_UID:$CURRENT_RUNTIME_GID" "$PROFILE_HOME/.cac" 2>/dev/null || true
+  owner_marker="$PROFILE_HOME/.cac-runtime-owner"
+  desired_owner="${CURRENT_RUNTIME_UID}:${CURRENT_RUNTIME_GID}"
+  current_owner="$(cat "$owner_marker" 2>/dev/null || true)"
+  if [[ "$current_owner" != "$desired_owner" ]]; then
+    echo "Preparing runtime home ownership: ${PROFILE_HOME} -> ${desired_owner}"
+    chown -R "$CURRENT_RUNTIME_UID:$CURRENT_RUNTIME_GID" "$PROFILE_HOME" 2>/dev/null || true
+    printf '%s\n' "$desired_owner" > "$owner_marker" 2>/dev/null || true
+    chown "$CURRENT_RUNTIME_UID:$CURRENT_RUNTIME_GID" "$owner_marker" 2>/dev/null || true
+  fi
   [[ -f "$CAC_RUNTIME_ENV_FILE" ]] && chown "$CURRENT_RUNTIME_UID:$CURRENT_RUNTIME_GID" "$CAC_RUNTIME_ENV_FILE" 2>/dev/null || true
 }
 
@@ -835,6 +842,7 @@ PY
   # ── Auto-detect timezone and locale from exit IP ──────────────
   _GEO_TZ="" _GEO_LANG=""
   _GEO_TZ="" _GEO_LANG=""
+  echo "Detecting exit geolocation..."
   if python3 -m ccimage.geo 2>/dev/null > "$CAC_RUNTIME_ENV_FILE"; then
     source "$CAC_RUNTIME_ENV_FILE"
     _GEO_TZ="${TZ:-}"
@@ -989,8 +997,11 @@ PY
   migrate_root_state
   sync_shell_rc
 
+  echo "Applying runtime profile..."
   apply_cherny_profile "$_env_dir"
+  echo "Preparing runtime user..."
   prepare_runtime_user
+  echo "Writing runtime shims..."
   write_runtime_shims
   export PATH="$CAC_DIR/shim-bin:$PATH"
   prepend_fingerprint_options
@@ -1005,6 +1016,7 @@ PY
   append_runtime_export NODE_OPTIONS "$NODE_OPTIONS"
   append_runtime_export BUN_OPTIONS "$BUN_OPTIONS"
 
+  echo "Preparing CloudCLI runtime..."
   prepare_cloudcli_home_mapping "$_env_dir"
   prepare_cloudcli_env_file
   ensure_x11_socket_dir
@@ -1029,7 +1041,9 @@ else
   exit 1
 fi
 
+echo "Waiting for Docker API from runtime..."
 wait_for_docker_host
+echo "Starting SSH service..."
 start_sshd
 
 _cleanup() {
@@ -1037,4 +1051,5 @@ _cleanup() {
 }
 trap _cleanup EXIT INT TERM
 
+echo "Dropping privileges to ${CURRENT_RUNTIME_UID}:${CURRENT_RUNTIME_GID}..."
 exec_as_runtime_user /init "$@"

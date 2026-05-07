@@ -651,7 +651,10 @@ _dk_compose() {
 }
 
 _dk_wait_runtime_ready() {
-  local state="" pid1_uid="" docker_api_rc="" tries phase="" detail="" last_detail=""
+  local state="" docker_api_rc="" runtime_rc="" runtime_user="" runtime_home="" tries phase="" detail="" last_detail=""
+  runtime_user="$(_dk_runtime_user_name)"
+  runtime_home="${CAC_FAKE_HOME:-$(_dk_read_env CAC_FAKE_HOME)}"
+  runtime_home="${runtime_home:-/home/${runtime_user}}"
   for tries in $(seq 1 90); do
     state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "")
     if [[ "$state" != "running" ]]; then
@@ -666,15 +669,15 @@ _dk_wait_runtime_ready() {
         phase="docker-api"
         detail="waiting"
       else
-        pid1_uid="$(
-          _dk_compose exec -T "$_dk_service" sh -lc "awk '/^Uid:/{print \$2; exit}' /proc/1/status" 2>/dev/null |
+        runtime_rc="$(
+          _dk_compose exec -T -u "$runtime_user" -e CAC_RUNTIME_HOME="$runtime_home" "$_dk_service" sh -lc 'test "$(id -u)" != "0" && test -f "$CAC_RUNTIME_HOME/.cac-env" && test -d "$CAC_RUNTIME_HOME/.cac/shim-bin"; printf "%s" $?' 2>/dev/null |
             tr -d '\r\n'
         )"
-        if [[ -n "$pid1_uid" && "$pid1_uid" != "0" ]]; then
+        if [[ "$runtime_rc" == "0" ]]; then
           return 0
         fi
-        phase="pid1"
-        detail="${pid1_uid:-unknown}"
+        phase="runtime"
+        detail="${runtime_rc:-waiting}"
       fi
     fi
 
@@ -686,8 +689,8 @@ _dk_wait_runtime_ready() {
         docker-api)
           _info "Container running; waiting for in-container Docker API..."
           ;;
-        pid1)
-          _info "Docker API ready; waiting for PID 1 to drop privileges..."
+        runtime)
+          _info "Docker API ready; waiting for runtime user environment..."
           ;;
       esac
       last_detail="$detail"

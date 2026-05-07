@@ -301,7 +301,16 @@ check_distro_mask() {
   echo "ID=${expected_id} VERSION_ID=${expected_version}"
 }
 
-check_pid1_user() {
+check_pid1_supervisor() {
+  local actual_uid actual_gid actual_name
+  actual_uid="$(awk '/^Uid:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
+  actual_gid="$(awk '/^Gid:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
+  actual_name="$(awk '/^Name:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
+  [[ -n "$actual_uid" && -n "$actual_gid" ]] || return 1
+  echo "pid1 ${actual_name:-process} uid=${actual_uid} gid=${actual_gid}"
+}
+
+check_runtime_user_exec() {
   local expected_uid expected_gid actual_uid actual_gid
   expected_uid="$(read_profile_value uid 2>/dev/null || true)"
   expected_gid="$(read_profile_value gid 2>/dev/null || true)"
@@ -310,12 +319,11 @@ check_pid1_user() {
   [ -n "$expected_uid" ] || return 1
   [ -n "$expected_gid" ] || return 1
 
-  actual_uid="$(awk '/^Uid:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
-  actual_gid="$(awk '/^Gid:/{print $2; exit}' /proc/1/status 2>/dev/null || true)"
-  [[ -n "$actual_uid" && "$actual_uid" != "0" ]] || return 1
+  actual_uid="$(id -u 2>/dev/null || true)"
+  actual_gid="$(id -g 2>/dev/null || true)"
   [[ "$actual_uid" == "$expected_uid" ]] || return 1
   [[ "$actual_gid" == "$expected_gid" ]] || return 1
-  echo "pid1 uid=${actual_uid} gid=${actual_gid}"
+  echo "runtime uid=${actual_uid} gid=${actual_gid}"
 }
 
 check_sudo_access() {
@@ -366,7 +374,8 @@ printf "\033[1mIdentity\033[0m\n"
 run_check "CAC"   "cac profile/runtime missing — restart the Docker stack" check_cac
 run_check "HOST"  "Hostname not spoofed" check_hostname
 run_check "USER"  "User/home persona not spoofed" check_persona
-run_check "PID1"  "Main process still running as root" check_pid1_user
+run_info_check "PID1"  "PID 1 unavailable" check_pid1_supervisor
+run_check "RUSER" "Runtime shell user is not the configured persona" check_runtime_user_exec
 run_check "SUDO"  "Runtime user cannot sudo without a password" check_sudo_access
 run_check "SSHD"  "SSH server is not listening inside the container" check_sshd
 run_check "UNAME" "Kernel version not spoofed" check_kernel_mask

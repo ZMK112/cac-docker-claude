@@ -47,7 +47,7 @@ Patch format:
 - Verification:
   - main container starts under `cac docker start`
   - `s6` launches `cloudcli` and `xvfb`
-  - `cac-check` reports `PID1` as non-root after switching `/init` to runtime user
+  - `cac-check` reports the PID 1 supervisor separately from runtime-user execution
 - Upstream status: `cac`-specific, not for upstream
 
 ### `CAC-PATH-001`
