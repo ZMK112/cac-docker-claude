@@ -153,79 +153,140 @@ write_default_tmux_conf() {
   cat > "$target" <<'EOF'
 # cac-docker-claude default tmux
 
-# ===== 基础 =====
+# =========================
+# 基础
+# =========================
+
 set -g default-shell /usr/bin/zsh
 set -g mouse on
 set -g history-limit 100000
+
+# 窗口/Pane 从 1 开始
 set -g base-index 1
 setw -g pane-base-index 1
 
-# ===== 终端颜色 =====
+# 自动重新编号
+set -g renumber-windows on
+
+# 更快 ESC 响应
+set -sg escape-time 0
+
+# =========================
+# Terminal / 颜色
+# =========================
+
 set -g default-terminal "screen-256color"
 
+# true color
 set-option -sa terminal-overrides ",xterm-256color:Tc"
 set-option -ga terminal-overrides ",*256col*:Tc"
 
-# ===== 前缀键 =====
+# =========================
+# Prefix
+# =========================
+
 unbind C-b
 set -g prefix C-a
 bind C-a send-prefix
 
-# ===== 更快响应 =====
-set -sg escape-time 0
-
-# ===== 分屏快捷键 =====
-bind | split-window -h
-bind - split-window -v
+# =========================
+# 分屏
+# =========================
 
 unbind '"'
 unbind %
 
-# ===== Vim 风格切 pane =====
+bind | split-window -h
+bind - split-window -v
+
+# =========================
+# Vim 风格 Pane 移动
+# =========================
+
 bind h select-pane -L
 bind j select-pane -D
 bind k select-pane -U
 bind l select-pane -R
 
-# ===== Vim 风格 resize =====
+# =========================
+# Vim 风格 Resize
+# =========================
+
 bind -r H resize-pane -L 5
 bind -r J resize-pane -D 5
 bind -r K resize-pane -U 5
 bind -r L resize-pane -R 5
 
-# ===== Reload 配置 =====
+# =========================
+# Reload Config
+# =========================
+
 bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
 
-# ===== 状态栏 =====
-set -g status-position bottom
-set -g status-justify left
-set -g status-style "bg=#1f2335,fg=#c0caf5"
+# =========================
+# Copy Mode
+# =========================
 
-set -g status-left-length 40
-set -g status-right-length 120
-
-set -g status-left "#[fg=#7aa2f7,bold] #S "
-set -g status-right "#[fg=#a9b1d6]%Y-%m-%d #[fg=#7dcfff]%H:%M "
-
-# ===== Window 样式 =====
-setw -g window-status-format " #I:#W "
-setw -g window-status-current-format " #[fg=#1a1b26,bg=#7aa2f7,bold] #I:#W "
-
-# ===== Pane 边框 =====
-set -g pane-border-style "fg=#3b4261"
-set -g pane-active-border-style "fg=#7aa2f7"
-
-# ===== 自动 renumber =====
-set-option -g renumber-windows on
-
-# ===== copy mode 使用 vi =====
 setw -g mode-keys vi
 
-# ===== copy-mode 快捷键 =====
 bind-key -T copy-mode-vi v send -X begin-selection
 bind-key -T copy-mode-vi y send -X copy-selection-and-cancel
 
-# ===== 开启 focus events =====
+# =========================
+# Claude Code / Terminal Title
+# =========================
+
+# 允许程序修改标题
+set -g allow-rename on
+
+# 自动使用 pane title 更新 window 名
+set -g automatic-rename on
+set -g automatic-rename-format '#{pane_title}'
+
+# 同步 terminal title
+set -g set-titles on
+set -g set-titles-string '#T'
+
+# Pane border 显示 title
+set -g pane-border-status top
+
+# 当前 pane title
+set -g pane-border-format '#{?pane_active,#[fg=green],#[fg=grey]} #{pane_index} #{pane_title} '
+
+# =========================
+# 状态栏
+# =========================
+
+set -g status-position bottom
+set -g status-justify left
+
+set -g status-style "bg=#1f2335,fg=#c0caf5"
+
+set -g status-left-length 50
+set -g status-right-length 120
+
+set -g status-left "#[fg=#7aa2f7,bold] #S "
+
+set -g status-right "#[fg=#a9b1d6]#(whoami)@#H #[fg=#7dcfff]%Y-%m-%d %H:%M "
+
+# =========================
+# Window 样式
+# =========================
+
+setw -g window-status-format " #I:#W "
+setw -g window-status-current-format " #[fg=#1a1b26,bg=#7aa2f7,bold] #I:#W "
+
+# =========================
+# Pane Border
+# =========================
+
+set -g pane-border-style "fg=#3b4261"
+set -g pane-active-border-style "fg=#7aa2f7"
+
+# =========================
+# Focus Event
+# =========================
+
 set -g focus-events on
 EOF
 }
