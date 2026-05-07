@@ -65,7 +65,7 @@ _dk_cmd_mount() {
 
   case "$action" in
     add)
-      local host_input="${1:-}" target_input="${2:-}" host_path="" target_path="" current_state existing_host restart_now=1
+      local host_input="${1:-}" target_input="${2:-}" host_path="" target_path="" current_state existing_host recreate_workspace="" restart_now=1
       if [[ -z "$host_input" ]]; then
         _err "Usage: cac docker mount add <host_dir> [container_path]"
         return 1
@@ -116,7 +116,8 @@ _dk_cmd_mount() {
         echo ""
         _warn "A Docker container is already running for this install."
         if _dk_prompt_yes_no "Recreate the running Docker container now to apply this mount?" "N"; then
-          _dk_compose up -d --force-recreate || return 1
+          recreate_workspace="$(_dk_workspace_host_current 2>/dev/null || _dk_workspace_host_abs)"
+          CAC_WORKSPACE_HOST="$recreate_workspace" _dk_compose up -d --force-recreate || return 1
           if ! _dk_wait_runtime_ready; then
             _dk_abort_startup
             _err "Container did not become ready after applying mount changes"
@@ -143,7 +144,7 @@ _dk_cmd_mount() {
       _dk_print_mounts
       ;;
     rm)
-      local target_input="${1:-}" target_path="" host_path="" current_state
+      local target_input="${1:-}" target_path="" host_path="" current_state recreate_workspace=""
       if [[ -z "$target_input" ]]; then
         _err "Usage: cac docker mount rm <container_path>"
         return 1
@@ -181,7 +182,8 @@ _dk_cmd_mount() {
         echo ""
         _warn "A Docker container is already running for this install."
         if _dk_prompt_yes_no "Recreate the running Docker container now to apply this removal?" "N"; then
-          _dk_compose up -d --force-recreate || return 1
+          recreate_workspace="$(_dk_workspace_host_current 2>/dev/null || _dk_workspace_host_abs)"
+          CAC_WORKSPACE_HOST="$recreate_workspace" _dk_compose up -d --force-recreate || return 1
           if ! _dk_wait_runtime_ready; then
             _dk_abort_startup
             _err "Container did not become ready after removing the mount"

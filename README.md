@@ -114,6 +114,8 @@ After changing mounts, restart the stack:
 cac docker restart
 ```
 
+Mount targets under `/workspace` are reserved and rejected. The main `/workspace` bind is controlled by the directory used for `cac docker start`; applying extra mounts will not cover it. If a running container is recreated by `cac docker mount`, the existing workspace path is preserved.
+
 ## Proxy Modes
 
 `cac docker setup` accepts a normal proxy URI or a YAML file path.
@@ -163,7 +165,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.3
+ghcr.io/zmk112/cac-docker-claude:v0.1.4
 ```
 
 Force a rebuild:
@@ -271,14 +273,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.3 bash scripts/package-source.sh
+PKG_VERSION=v0.1.4 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.3.zip
-dist/cac-docker-claude-source-v0.1.3.sha256
+dist/cac-docker-claude-source-v0.1.4.zip
+dist/cac-docker-claude-source-v0.1.4.sha256
 scripts/install-stable.sh
 ```
 

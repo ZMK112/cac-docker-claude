@@ -123,6 +123,18 @@ _dk_host_docker_socket() {
 }
 
 _dk_workspace_host_abs() {
+  if [[ -n "${CAC_WORKSPACE_HOST:-}" ]]; then
+    python3 - "$CAC_WORKSPACE_HOST" <<'PY'
+import os
+import sys
+
+path = os.path.realpath(sys.argv[1])
+if not os.path.isdir(path):
+    raise SystemExit(1)
+print(path)
+PY
+    return
+  fi
   pwd -P
 }
 
