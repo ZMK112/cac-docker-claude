@@ -48,6 +48,26 @@ if ./cac env ls >/tmp/cac-docker-claude-local.out 2>&1; then
 fi
 pass "docker-only-cli"
 
+tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-path.XXXXXX")"
+trap 'rm -rf "$tmp_home"' EXIT
+cat > "${tmp_home}/.zshrc" <<'EOF'
+export PATH="$HOME/.cac/bin:$PATH"
+# >>> cac — Claude Code Cloak >>>
+export PATH="$HOME/bin:$HOME/.cac/bin:$PATH"
+alias claude="$HOME/.cac/bin/claude"
+# <<< cac — Claude Code Cloak <<<
+export KEEP_ME=1
+EOF
+HOME="$tmp_home" bash install.sh --local --no-build >/tmp/cac-docker-claude-install-path.out
+if bash -lc "HOME='$tmp_home'; source '$tmp_home/.zshrc'; printf '%s\n' \"\$PATH\"" | tr ':' '\n' | grep -Fxq "${tmp_home}/.cac/bin"; then
+    printf 'installer left ~/.cac/bin active in shell PATH\n' >&2
+    cat "${tmp_home}/.zshrc" >&2
+    exit 1
+fi
+grep -q 'export PATH="$HOME/bin:$PATH"' "${tmp_home}/.zshrc"
+grep -q 'export KEEP_ME=1' "${tmp_home}/.zshrc"
+pass "installer-path-cleanup"
+
 if [[ "$suite" == "full" ]]; then
     command -v docker >/dev/null 2>&1 || { printf 'docker is required for --suite full\n' >&2; exit 1; }
     docker compose version >/dev/null

@@ -412,6 +412,43 @@ detect_rc_file() {
     fi
 }
 
+install_shell_path_config() {
+    local rc_file tmp
+    rc_file="$(detect_rc_file)"
+    if [[ -z "$rc_file" ]]; then
+        yellow "Shell config file not found; add this manually if cac is not in PATH:"
+        printf '  export PATH="$HOME/bin:$PATH"\n'
+        return 0
+    fi
+
+    tmp="${rc_file}.cac-docker-claude.$$.tmp"
+    awk '
+        /# >>> cac/ { skip=1; next }
+        /# <<< cac/ { skip=0; next }
+        skip { next }
+        /\.cac\/bin/ { next }
+        /# cac .*Claude Code Cloak/ { next }
+        /# cac 命令/ { next }
+        /# claude wrapper/ { next }
+        { print }
+    ' "$rc_file" > "$tmp"
+    cat -s "$tmp" > "$rc_file"
+    rm -f "$tmp"
+
+    if ! grep -q '# >>> cac-docker-claude >>>' "$rc_file" 2>/dev/null; then
+        cat >> "$rc_file" <<'CACEOF'
+
+# >>> cac-docker-claude >>>
+PATH=$(printf '%s\n' "$PATH" | tr ':' '\n' | awk -v home="$HOME" '$0 != home"/bin" && $0 != home"/.cac/bin" && !seen[$0]++' | paste -sd ':' -)
+export PATH="$HOME/bin:$PATH"
+# <<< cac-docker-claude <<<
+CACEOF
+        green "✓ PATH written to $rc_file"
+    else
+        green "✓ PATH already configured in $rc_file"
+    fi
+}
+
 read_kv_file() {
     local file="$1" key="$2"
     [[ -f "$file" ]] || return 1
@@ -727,6 +764,7 @@ main() {
     install_source_tree
     install_assets
     link_entrypoint
+    install_shell_path_config
     install_docker_resources
     print_docker_data_preserve_notice
     initialize_cac

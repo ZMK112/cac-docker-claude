@@ -321,37 +321,17 @@ _write_path_to_rc() {
     if [[ -z "$rc_file" ]]; then
         echo "  $(_yellow '⚠') shell config file not found, please add PATH manually:"
         echo '    export PATH="$HOME/bin:$PATH"'
-        echo '    export PATH="$HOME/.cac/bin:$PATH"'
         return 0
     fi
 
-    if grep -q '# >>> cac >>>' "$rc_file" 2>/dev/null; then
-        echo "  ✓ PATH already exists in $rc_file, skipping"
-        return 0
-    fi
-
-    # Compat: remove old format if present
-    if grep -q '\.cac/bin' "$rc_file" 2>/dev/null; then
-        _remove_path_from_rc "$rc_file"
-    fi
+    _remove_path_from_rc "$rc_file"
 
     cat >> "$rc_file" << 'CACEOF'
 
-# >>> cac — Claude Code Cloak >>>
+# >>> cac-docker-claude >>>
 PATH=$(printf '%s\n' "$PATH" | tr ':' '\n' | awk -v home="$HOME" '$0 != home"/bin" && $0 != home"/.cac/bin" && !seen[$0]++' | paste -sd ':' -)
-export PATH="$HOME/bin:$HOME/.cac/bin:$PATH"
-cac() {
-    local _cac_bin
-    _cac_bin=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':' | sed 's/:$//') type -P cac 2>/dev/null)
-    [[ -z "$_cac_bin" && -x "$HOME/bin/cac" ]] && _cac_bin="$HOME/bin/cac"
-    [[ -z "$_cac_bin" ]] && { echo "[cac] error: cac binary not found in PATH" >&2; return 1; }
-    command "$_cac_bin" "$@"
-    local _rc=$?
-    PATH=$(printf '%s\n' "$PATH" | tr ':' '\n' | awk -v home="$HOME" '$0 != home"/bin" && $0 != home"/.cac/bin" && !seen[$0]++' | paste -sd ':' -)
-    export PATH="$HOME/bin:$HOME/.cac/bin:$PATH"
-    return $_rc
-}
-# <<< cac — Claude Code Cloak <<<
+export PATH="$HOME/bin:$PATH"
+# <<< cac-docker-claude <<<
 CACEOF
     echo "  ✓ PATH written to $rc_file"
     return 0
@@ -362,9 +342,9 @@ _remove_path_from_rc() {
     [[ -z "$rc_file" ]] && return 0
 
     # Remove marked block (new format)
-    if grep -q '# >>> cac' "$rc_file" 2>/dev/null; then
+    if grep -qE '# >>> (cac|cac-docker-claude)' "$rc_file" 2>/dev/null; then
         local tmp="${rc_file}.cac-tmp"
-        awk '/# >>> cac/{skip=1; next} /# <<< cac/{skip=0; next} !skip' "$rc_file" > "$tmp"
+        awk '/# >>> (cac|cac-docker-claude)/{skip=1; next} /# <<< (cac|cac-docker-claude)/{skip=0; next} !skip' "$rc_file" > "$tmp"
         cat -s "$tmp" > "$rc_file"
         rm -f "$tmp"
         echo "  ✓ Removed PATH config from $rc_file"
