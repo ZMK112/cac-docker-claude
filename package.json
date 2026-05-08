@@ -1,6 +1,6 @@
 {
   "name": "cac-docker-claude",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Docker-only Claude Code runtime with TUN proxy isolation and local image builds.",
   "bin": {
     "cac": "cac"

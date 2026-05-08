@@ -5,6 +5,7 @@ DEFAULT_REPO="ZMK112/cac-docker-claude"
 REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-$DEFAULT_REPO}}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-stable.XXXXXX")"
 INSTALL_ARGS=()
+INSTALL_ARGS_COUNT=0
 
 cleanup() {
     rm -rf "$TMP_DIR"
@@ -54,6 +55,7 @@ parse_args() {
                 ;;
             --skip-identity|--force-identity|--no-build)
                 INSTALL_ARGS+=("$1")
+                INSTALL_ARGS_COUNT=$((INSTALL_ARGS_COUNT + 1))
                 shift
                 ;;
             -h|--help)
@@ -178,7 +180,7 @@ install_release_zip() {
     log "Installing from ${install_dir}"
     (
         cd "$install_dir"
-        if [[ "${#INSTALL_ARGS[@]}" -gt 0 ]]; then
+        if [[ "$INSTALL_ARGS_COUNT" -gt 0 ]]; then
             bash install.sh --local --yes "${INSTALL_ARGS[@]}"
         else
             bash install.sh --local --yes
