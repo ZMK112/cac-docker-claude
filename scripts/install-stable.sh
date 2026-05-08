@@ -178,7 +178,11 @@ install_release_zip() {
     log "Installing from ${install_dir}"
     (
         cd "$install_dir"
-        bash install.sh --local --yes "${INSTALL_ARGS[@]}"
+        if [[ "${#INSTALL_ARGS[@]}" -gt 0 ]]; then
+            bash install.sh --local --yes "${INSTALL_ARGS[@]}"
+        else
+            bash install.sh --local --yes
+        fi
     )
 }
 
