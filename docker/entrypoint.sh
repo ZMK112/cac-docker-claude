@@ -610,6 +610,43 @@ if [[ "$DISABLE_IPV6" == "1" ]]; then
   sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
 fi
 
+apply_net_tuning() {
+  [[ "${CAC_NET_TUNING:-0}" == "1" ]] || return 0
+
+  echo "Applying optional TCP network tuning..."
+  sysctl -w net.ipv4.tcp_fastopen="${CAC_TCP_FASTOPEN:-3}" 2>/dev/null || \
+    echo "warning: failed to set net.ipv4.tcp_fastopen" >&2
+  sysctl -w net.ipv4.tcp_mtu_probing="${CAC_TCP_MTU_PROBING:-1}" 2>/dev/null || \
+    echo "warning: failed to set net.ipv4.tcp_mtu_probing" >&2
+  sysctl -w net.ipv4.tcp_keepalive_time="${CAC_TCP_KEEPALIVE_TIME:-600}" 2>/dev/null || \
+    echo "warning: failed to set net.ipv4.tcp_keepalive_time" >&2
+  sysctl -w net.ipv4.tcp_keepalive_intvl="${CAC_TCP_KEEPALIVE_INTVL:-30}" 2>/dev/null || \
+    echo "warning: failed to set net.ipv4.tcp_keepalive_intvl" >&2
+  sysctl -w net.ipv4.tcp_keepalive_probes="${CAC_TCP_KEEPALIVE_PROBES:-5}" 2>/dev/null || \
+    echo "warning: failed to set net.ipv4.tcp_keepalive_probes" >&2
+
+  local bbr_mode="${CAC_NET_TUNING_BBR:-auto}" available=""
+  available="$(cat /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null || true)"
+  case "$bbr_mode" in
+    0|false|False|FALSE|off|OFF)
+      echo "BBR tuning skipped by CAC_NET_TUNING_BBR=${bbr_mode}"
+      ;;
+    1|true|True|TRUE|on|ON|auto|"")
+      if grep -qw bbr <<<"$available"; then
+        sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || \
+          echo "warning: failed to set net.ipv4.tcp_congestion_control=bbr" >&2
+      else
+        echo "BBR tuning skipped: bbr is not available (available: ${available:-unknown})"
+      fi
+      ;;
+    *)
+      echo "warning: unknown CAC_NET_TUNING_BBR=${bbr_mode}; expected auto, 0, or 1" >&2
+      ;;
+  esac
+}
+
+apply_net_tuning
+
 _SINGBOX_PID=""
 _DOCKER_ROUTE_SPEC=""
 _PROXY_ROUTE_SPEC=""

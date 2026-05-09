@@ -119,6 +119,24 @@ check_exit_ip() {
   fi
 }
 
+check_net_tuning() {
+  local enabled="${CAC_NET_TUNING:-0}"
+  local current available fastopen mtu_probe keepalive_time keepalive_intvl keepalive_probes tun_mtu
+  current="$(cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || echo unknown)"
+  available="$(cat /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null || echo unknown)"
+  fastopen="$(cat /proc/sys/net/ipv4/tcp_fastopen 2>/dev/null || echo unknown)"
+  mtu_probe="$(cat /proc/sys/net/ipv4/tcp_mtu_probing 2>/dev/null || echo unknown)"
+  keepalive_time="$(cat /proc/sys/net/ipv4/tcp_keepalive_time 2>/dev/null || echo unknown)"
+  keepalive_intvl="$(cat /proc/sys/net/ipv4/tcp_keepalive_intvl 2>/dev/null || echo unknown)"
+  keepalive_probes="$(cat /proc/sys/net/ipv4/tcp_keepalive_probes 2>/dev/null || echo unknown)"
+  tun_mtu="$(ip -o link show tun0 2>/dev/null | sed -n 's/.* mtu \([0-9][0-9]*\) .*/\1/p' | head -1)"
+  tun_mtu="${tun_mtu:-missing}"
+
+  printf 'enabled=%s congestion=%s available="%s" fastopen=%s mtu_probing=%s keepalive=%s/%s/%s tun_mtu=%s' \
+    "$enabled" "$current" "$available" "$fastopen" "$mtu_probe" \
+    "$keepalive_time" "$keepalive_intvl" "$keepalive_probes" "$tun_mtu"
+}
+
 check_geo() {
   local tz="${TZ:-not set}"
   local lang="${LANG:-not set}"
@@ -366,6 +384,7 @@ run_check "TCP"   "TCP connect failed — check proxy address and credentials" c
 run_check "HTTP"  "HTTP request failed — check TLS and proxy config" check_http
 run_check "EXIT"  "Cannot determine exit IP" check_exit_ip
 run_check "GEO"   "Timezone/locale not set" check_geo
+run_info_check "TUNE" "network tuning unavailable" check_net_tuning
 run_info_check "SPD" "proxy speed unavailable" check_proxy_speed
 run_check "WS"    "Workspace is not writable by runtime user" check_workspace_write
 

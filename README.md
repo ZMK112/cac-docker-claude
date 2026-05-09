@@ -203,6 +203,17 @@ The runtime stack separates several responsibilities:
 
 External application traffic from the main container is expected to pass through sing-box TUN. Internal traffic required for Docker control, child containers, loopback, and configured private ranges can be direct.
 
+Optional TCP tuning is available but disabled by default to preserve historical behavior:
+
+```env
+CAC_NET_TUNING=1
+CAC_NET_TUNING_BBR=auto
+```
+
+When enabled, the container tries to apply TCP fast open, MTU probing, and shorter keepalive values inside the privileged network namespace. BBR is only enabled when the Docker VM or Linux host kernel exposes `bbr` in `tcp_available_congestion_control`; on many Docker Desktop or OrbStack hosts it is not available, so the runtime logs that BBR was skipped. `cac docker check` reports the active tuning state.
+
+中文：网络调优默认关闭。开启 `CAC_NET_TUNING=1` 后会尝试设置 TCP fast open、MTU probing 和 keepalive 参数。BBR 只有在宿主机或 Docker VM 内核支持时才会启用；如果不可用会跳过，不影响容器启动。
+
 ## Local Builds
 
 Stable installs keep complete source under `~/.cac/source`, so Docker mode defaults to local image builds:
@@ -214,7 +225,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.14
+ghcr.io/zmk112/cac-docker-claude:v0.1.15
 ```
 
 Force a rebuild:
@@ -336,14 +347,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.14 bash scripts/package-source.sh
+PKG_VERSION=v0.1.15 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.14.zip
-dist/cac-docker-claude-source-v0.1.14.sha256
+dist/cac-docker-claude-source-v0.1.15.zip
+dist/cac-docker-claude-source-v0.1.15.sha256
 scripts/install-stable.sh
 ```
 
