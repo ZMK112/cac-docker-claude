@@ -227,7 +227,7 @@ _dk_cmd_setup() {
   printf "\033[1mcac docker setup\033[0m\n"
   echo ""
 
-  local proxy prompt_proxy_default mode detected_mode docker_dir data_dir prior_data_dir data_dir_abs prior_data_dir_abs data_state_summary container_name runtime_hostname gateway_name child_proxy child_no_proxy image_ref ssh_enabled ssh_port ssh_password web_enabled web_port web_bind current_state prior_proxy prior_proxy_kind proxy_kind="uri" proxy_chain_yaml="" proxy_changed=0 proxy_probe_ok=0 running_workspace new_workspace preferred_shell shell_choice shell_changed=0 data_dir_changed=0 restart_reason="saved settings" control_subnet proxy_ip client_ip bridge_ip
+  local proxy prompt_proxy_default mode detected_mode docker_dir data_dir prior_data_dir data_dir_abs prior_data_dir_abs data_state_summary container_name runtime_hostname gateway_name child_proxy child_no_proxy image_ref ssh_enabled ssh_bind ssh_port ssh_password web_enabled web_port web_bind current_state prior_proxy prior_proxy_kind proxy_kind="uri" proxy_chain_yaml="" proxy_changed=0 proxy_probe_ok=0 running_workspace new_workspace preferred_shell shell_choice shell_changed=0 data_dir_changed=0 restart_reason="saved settings" control_subnet proxy_ip client_ip bridge_ip
   prior_proxy="$(_dk_read_env PROXY_URI)"
   prior_proxy_kind="$(_dk_read_env CAC_PROXY_CONFIG_KIND)"
   current_state="$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")"
@@ -320,6 +320,8 @@ _dk_cmd_setup() {
   gateway_name="${gateway_name:-boris-gateway}"
   ssh_enabled="${CAC_ENABLE_SSH:-$(_dk_read_env CAC_ENABLE_SSH)}"
   ssh_enabled="${ssh_enabled:-1}"
+  ssh_bind="${CAC_HOST_SSH_BIND:-$(_dk_read_env CAC_HOST_SSH_BIND)}"
+  ssh_bind="${ssh_bind:-127.0.0.1}"
   ssh_port="${CAC_HOST_SSH_PORT:-$(_dk_read_env CAC_HOST_SSH_PORT)}"
   ssh_port="${ssh_port:-2222}"
   web_enabled="${CAC_ENABLE_WEB:-$(_dk_read_env CAC_ENABLE_WEB)}"
@@ -327,9 +329,11 @@ _dk_cmd_setup() {
   web_port="${CAC_HOST_WEB_PORT:-$(_dk_read_env CAC_HOST_WEB_PORT)}"
   web_port="${web_port:-3001}"
   web_bind="${CAC_HOST_WEB_BIND:-$(_dk_read_env CAC_HOST_WEB_BIND)}"
-  web_bind="${web_bind:-0.0.0.0}"
+  web_bind="${web_bind:-127.0.0.1}"
   ssh_password="${CAC_SSH_PASSWORD:-$(_dk_read_env CAC_SSH_PASSWORD)}"
-  ssh_password="${ssh_password:-cherny}"
+  if [[ -z "$ssh_password" || "$ssh_password" == "cherny" ]]; then
+    ssh_password="$(_dk_random_secret)"
+  fi
   preferred_shell="${CAC_FAKE_SHELL:-$(_dk_read_env CAC_FAKE_SHELL)}"
   preferred_shell="${preferred_shell:-/bin/zsh}"
   shell_choice="$(_dk_prompt_value "Default interactive shell (bash or zsh)" "${preferred_shell##*/}" 1)" || return 1
@@ -455,8 +459,12 @@ _dk_cmd_setup() {
   _dk_write_env CAC_CHILD_CONTAINER_PROXY_URL "$child_proxy"
   _dk_write_env CAC_CHILD_CONTAINER_NO_PROXY "$child_no_proxy"
   _dk_write_env CAC_ENABLE_SSH "$ssh_enabled"
+  _dk_write_env CAC_HOST_SSH_BIND "$ssh_bind"
   _dk_write_env CAC_HOST_SSH_PORT "$ssh_port"
   _dk_write_env CAC_SSH_PASSWORD "$ssh_password"
+  _dk_write_env CAC_ENABLE_WEB "$web_enabled"
+  _dk_write_env CAC_HOST_WEB_BIND "$web_bind"
+  _dk_write_env CAC_HOST_WEB_PORT "$web_port"
   _dk_write_env CAC_FAKE_SHELL "$preferred_shell"
   if [[ -f "$_dk_env_file" ]]; then
     local cleanup_tmp

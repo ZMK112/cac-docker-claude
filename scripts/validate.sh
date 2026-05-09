@@ -49,8 +49,8 @@ if ./cac env ls >/tmp/cac-docker-claude-local.out 2>&1; then
 fi
 pass "docker-only-cli"
 
-[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.15')" == "0.1.15" ]]
-[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.15')" == "0.1.15" ]]
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.16')" == "0.1.16" ]]
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.16')" == "0.1.16" ]]
 pass "version-normalization"
 
 tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-path.XXXXXX")"

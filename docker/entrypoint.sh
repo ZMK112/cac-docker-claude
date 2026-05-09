@@ -13,7 +13,7 @@ CHERNY_ENV_JSON="${CHERNY_TEMPLATE_DIR}/cherny.env.json"
 CHERNY_PROMPT_JSON="${CHERNY_TEMPLATE_DIR}/cherny.prompt.json"
 CHERNY_TELEMETRY_JSON="${CHERNY_TEMPLATE_DIR}/cherny.telemetry.json"
 CAC_ENABLE_SSH="${CAC_ENABLE_SSH:-1}"
-CAC_SSH_PASSWORD="${CAC_SSH_PASSWORD:-cherny}"
+CAC_SSH_PASSWORD="${CAC_SSH_PASSWORD:-}"
 CAC_SSH_CONTAINER_PORT="${CAC_SSH_CONTAINER_PORT:-22}"
 CAC_FAKE_USER="${CAC_FAKE_USER:-cherny}"
 CAC_FAKE_UID="${CAC_FAKE_UID:-1001}"
@@ -827,6 +827,16 @@ _DOCKER_ROUTE_SPEC="$(capture_named_route "$(docker_host_target || true)")"
 _PROXY_ROUTE_SPEC="$(capture_named_route "$(proxy_host_target || true)")"
 
 ensure_profile_home
+
+if [[ -z "$CAC_SSH_PASSWORD" || "$CAC_SSH_PASSWORD" == "cherny" ]]; then
+  CAC_SSH_PASSWORD="$(python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(18))
+PY
+)"
+  export CAC_SSH_PASSWORD
+  echo "Generated random SSH password for this container. Persist CAC_SSH_PASSWORD in .env if SSH password login is required."
+fi
 
 hide_container_traces
 

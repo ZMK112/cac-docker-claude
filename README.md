@@ -225,7 +225,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.15
+ghcr.io/zmk112/cac-docker-claude:v0.1.16
 ```
 
 Force a rebuild:
@@ -302,10 +302,12 @@ Common SSH settings in `~/.cac/docker/.env`:
 CAC_ENABLE_SSH=1
 CAC_HOST_SSH_BIND=127.0.0.1
 CAC_HOST_SSH_PORT=2222
-CAC_SSH_PASSWORD=your-password
+CAC_SSH_PASSWORD=REPLACE_WITH_STRONG_PASSWORD
 ```
 
-Keep SSH bound to `127.0.0.1` unless you explicitly need LAN access. If you bind SSH to `0.0.0.0` or another LAN address, change `CAC_SSH_PASSWORD` first and restrict access at the host firewall.
+Keep SSH and the no-login Web UI bound to `127.0.0.1` unless you explicitly need LAN access. If you bind either service to `0.0.0.0` or another LAN address, change `CAC_SSH_PASSWORD` first and restrict access with host firewall rules, IP allowlisting, or an authenticated reverse proxy. Do not commit real proxy share links, SSH passwords, bridge passwords, generated `.env` files, or subscription exports.
+
+New setup runs generate a random SSH password and a random child proxy bridge password when none exists. Existing `.env` values are preserved during install/update, so users with older deployments should review `CAC_HOST_SSH_BIND`, `CAC_HOST_WEB_BIND`, `CAC_SSH_PASSWORD`, and `CAC_CHILD_PROXY_BRIDGE_PASSWORD` manually.
 
 中文：SSH 用于从宿主机直接进入主容器。默认建议只监听 `127.0.0.1`，连接命令通常是 `ssh -p 2222 cherny@127.0.0.1`。如果要开放给局域网，先修改默认密码，并确认宿主机防火墙规则。
 
@@ -347,14 +349,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.15 bash scripts/package-source.sh
+PKG_VERSION=v0.1.16 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.15.zip
-dist/cac-docker-claude-source-v0.1.15.sha256
+dist/cac-docker-claude-source-v0.1.16.zip
+dist/cac-docker-claude-source-v0.1.16.sha256
 scripts/install-stable.sh
 ```
 
