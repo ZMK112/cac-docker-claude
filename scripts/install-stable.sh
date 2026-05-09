@@ -15,6 +15,31 @@ trap cleanup EXIT
 log() { printf '[cac-install] %s\n' "$*" >&2; }
 die() { printf '[cac-install] error: %s\n' "$*" >&2; exit 1; }
 
+wait_with_progress() {
+    local label="$1" pid="$2" interval="${CAC_INSTALL_PROGRESS_INTERVAL:-5}" elapsed=0 rc=0
+    [[ "$interval" =~ ^[0-9]+$ ]] || interval=5
+    [[ "$interval" -gt 0 ]] || interval=5
+
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        elapsed=$((elapsed + 1))
+        if (( elapsed % interval == 0 )); then
+            log "${label} still running (${elapsed}s)"
+        fi
+    done
+
+    if wait "$pid"; then
+        log "${label} complete"
+        return 0
+    fi
+    rc=$?
+    log "${label} failed"
+    return "$rc"
+}
+
 usage() {
     cat <<'EOF'
 Usage: bash install-stable.sh [options]
@@ -151,11 +176,13 @@ download_latest_stable() {
 
     zip_path="$TMP_DIR/$zip_name"
     log "Downloading ${zip_name} (${tag}, ${package_kind:-source})"
-    curl_github "$zip_url" "$zip_path" "application/octet-stream"
+    curl_github "$zip_url" "$zip_path" "application/octet-stream" &
+    wait_with_progress "Downloading ${zip_name}" "$!"
 
     if [[ -n "$sha_name" && -n "$sha_url" ]]; then
         sha_path="$TMP_DIR/$sha_name"
-        curl_github "$sha_url" "$sha_path" "application/octet-stream"
+        curl_github "$sha_url" "$sha_path" "application/octet-stream" &
+        wait_with_progress "Downloading ${sha_name}" "$!"
         (cd "$TMP_DIR" && shasum -a 256 -c "$sha_name") >/dev/null || die "checksum verification failed for ${zip_name}"
         log "Checksum OK"
     else
@@ -171,7 +198,9 @@ install_release_zip() {
     local install_file install_dir
 
     mkdir -p "$unpack_dir"
-    unzip -q "$zip_path" -d "$unpack_dir"
+    log "Unpacking source release"
+    unzip -q "$zip_path" -d "$unpack_dir" &
+    wait_with_progress "Unpacking source release" "$!"
 
     install_file="$(find "$unpack_dir" -maxdepth 3 -type f -name install.sh -print -quit 2>/dev/null || true)"
     [[ -n "$install_file" ]] || die "could not find install.sh in source release"

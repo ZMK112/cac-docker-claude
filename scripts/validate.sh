@@ -42,11 +42,16 @@ pass "build"
 ./cac docker help >/dev/null
 ./cac docker help | grep -q "start      Start the container; no-op if already running"
 ./cac docker help | grep -q "restart    Restart and remount the current directory as /workspace"
+./cac docker help | grep -q "update     Update to the latest stable release with rollback; skips when current"
 if ./cac env ls >/tmp/cac-docker-claude-local.out 2>&1; then
     printf 'local env command unexpectedly succeeded\n' >&2
     exit 1
 fi
 pass "docker-only-cli"
+
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.14')" == "0.1.14" ]]
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.14')" == "0.1.14" ]]
+pass "version-normalization"
 
 tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-path.XXXXXX")"
 trap 'rm -rf "$tmp_home"' EXIT

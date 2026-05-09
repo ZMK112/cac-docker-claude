@@ -1,9 +1,9 @@
 # ── utils: colors, read/write, UUID, proxy parsing ───────────────────────
 
 # shellcheck disable=SC2034  # used in build-concatenated cac script
-CAC_VERSION="0.1.13"
+CAC_VERSION="0.1.14"
 CAC_DOCKER_IMAGE_REPO="${CAC_DOCKER_IMAGE_REPO:-ghcr.io/zmk112/cac-docker-claude}"
-CAC_DOCKER_IMAGE_TAG="${CAC_DOCKER_IMAGE_TAG:-v0.1.13}"
+CAC_DOCKER_IMAGE_TAG="${CAC_DOCKER_IMAGE_TAG:-v0.1.14}"
 
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
 _die()    { printf '%b\n' "$(_red "error:") $*" >&2; exit 1; }
@@ -253,6 +253,37 @@ _timer_elapsed() {
     else
         printf '%ds' $(( now - _TIMER_START ))
     fi
+}
+
+_wait_with_progress() {
+    local label="$1" pid="$2" interval="${CAC_PROGRESS_INTERVAL:-${CAC_INSTALL_PROGRESS_INTERVAL:-5}}" elapsed=0 rc=0
+    [[ "$interval" =~ ^[0-9]+$ ]] || interval=5
+    [[ "$interval" -gt 0 ]] || interval=5
+
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        elapsed=$((elapsed + 1))
+        if (( elapsed % interval == 0 )); then
+            echo "$(_cyan "  ${label} still running (${elapsed}s)")" >&2
+        fi
+    done
+
+    if wait "$pid"; then
+        echo "$(_green "✓ ${label}")" >&2
+        return 0
+    fi
+    rc=$?
+    echo "$(_red "✗ ${label}")" >&2
+    return "$rc"
+}
+
+_normalize_release_version() {
+    local version="$1"
+    version="${version#v}"
+    printf '%s\n' "$version"
 }
 
 _require_setup() {

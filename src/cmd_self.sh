@@ -10,6 +10,14 @@ _self_copy_if_present() {
     cp -pR "$src" "$dst"
 }
 
+_self_copy_if_present_with_progress() {
+    local src="$1" dst="$2" label="$3"
+    [[ -e "$src" || -L "$src" ]] || return 0
+    rm -rf "$dst"
+    cp -pR "$src" "$dst" &
+    _wait_with_progress "$label" "$!" || return 1
+}
+
 _self_copy_docker_state_if_present() {
     local src="$1" dst="$2"
     [[ -e "$src" || -L "$src" ]] || return 0
@@ -32,14 +40,14 @@ _self_restore_docker_state_if_present() {
 _self_backup_current_install() {
     local backup_dir="$1" dist_dir="$HOME/.cac-dist" bin_entry="$HOME/bin/cac" docker_dir="$HOME/.cac/docker" source_dir="$HOME/.cac/source"
     mkdir -p "$backup_dir"
-    _self_copy_if_present "$dist_dir" "${backup_dir}/cac-dist"
+    _self_copy_if_present_with_progress "$dist_dir" "${backup_dir}/cac-dist" "Backing up cac runtime"
     _self_copy_if_present "$bin_entry" "${backup_dir}/cac-entry"
-    _self_copy_if_present "$source_dir" "${backup_dir}/source"
+    _self_copy_if_present_with_progress "$source_dir" "${backup_dir}/source" "Backing up source tree"
     if [[ -L "$docker_dir" ]]; then
         readlink "$docker_dir" > "${backup_dir}/docker-link-target" 2>/dev/null || true
         _self_copy_docker_state_if_present "$docker_dir" "${backup_dir}/docker-state"
     elif [[ -e "$docker_dir" ]]; then
-        _self_copy_if_present "$docker_dir" "${backup_dir}/docker-dir"
+        _self_copy_if_present_with_progress "$docker_dir" "${backup_dir}/docker-dir" "Backing up Docker resources"
     fi
 }
 
@@ -94,7 +102,9 @@ _self_find_install_dir() {
         case "$source" in
             *.zip)
                 command -v unzip >/dev/null 2>&1 || _die "unzip is required to upgrade from a zip archive"
-                unzip -q "$source" -d "$tmp_dir" || return 1
+                echo "Unpacking release archive ..."
+                unzip -q "$source" -d "$tmp_dir" &
+                _wait_with_progress "Unpacking release archive" "$!" || return 1
                 candidate="$(find "$tmp_dir" -maxdepth 2 -type f -name install.sh 2>/dev/null | head -n1)"
                 [[ -n "$candidate" ]] || return 1
                 (cd "$(dirname "$candidate")" && pwd -P)
@@ -154,7 +164,8 @@ _self_finalize_docker_resources_after_upgrade() {
 
     mkdir -p "$HOME/.cac"
     new_dir="$(mktemp -d "$HOME/.cac/.docker-new.XXXXXX")"
-    if ! rsync -a --delete \
+    echo "Syncing Docker resources after upgrade ..."
+    rsync -a --delete \
         --exclude '.env' \
         --exclude 'data/' \
         --exclude 'mounts.json' \
@@ -162,7 +173,8 @@ _self_finalize_docker_resources_after_upgrade() {
         --exclude '__pycache__/' \
         --exclude '*.pyc' \
         --exclude '*.pyo' \
-        "${source_dir}/" "${new_dir}/"; then
+        "${source_dir}/" "${new_dir}/" &
+    if ! _wait_with_progress "Syncing Docker resources after upgrade" "$!"; then
         rm -rf "$new_dir"
         return 1
     fi
@@ -230,7 +242,7 @@ PY
 
 _self_download_latest_stable_release() {
     local repo="${1:-$_SELF_STABLE_REPO}" tmp_dir="$2" release_json="$tmp_dir/release.json"
-    local api_url info_file tag zip_name zip_url sha_name sha_url zip_path sha_path
+    local api_url info_file tag zip_name zip_url sha_name sha_url zip_path sha_path force="${3:-0}"
     [[ -n "$repo" ]] || _die "stable release repo is empty"
     api_url="https://api.github.com/repos/${repo}/releases/latest"
 
@@ -246,14 +258,24 @@ _self_download_latest_stable_release() {
     sha_url="$(sed -n '5p' "$info_file")"
     [[ -n "$tag" && -n "$zip_name" && -n "$zip_url" ]] || _die "stable release metadata is incomplete"
 
+    if [[ "$force" != "1" ]] && [[ "$(_normalize_release_version "$tag")" == "$(_normalize_release_version "$CAC_VERSION")" ]]; then
+        echo "  Latest stable: $(_green "$tag")" >&2
+        echo "  Current version: $(_green "v${CAC_VERSION}")" >&2
+        echo "$(_green_bold "Already up to date") $(_dim "no installation needed")" >&2
+        printf '%s\n' "__CAC_ALREADY_CURRENT__"
+        return 0
+    fi
+
     zip_path="$tmp_dir/$zip_name"
     echo "  Stable release: $(_cyan "$tag")" >&2
     echo "  Downloading: $zip_name" >&2
-    _self_curl_github "$zip_url" "$zip_path" || _die "failed to download $zip_name"
+    _self_curl_github "$zip_url" "$zip_path" &
+    _wait_with_progress "Downloading $zip_name" "$!" || _die "failed to download $zip_name"
 
     if [[ -n "$sha_name" && -n "$sha_url" ]]; then
         sha_path="$tmp_dir/$sha_name"
-        _self_curl_github "$sha_url" "$sha_path" || _die "failed to download $sha_name"
+        _self_curl_github "$sha_url" "$sha_path" &
+        _wait_with_progress "Downloading $sha_name" "$!" || _die "failed to download $sha_name"
         (cd "$tmp_dir" && shasum -a 256 -c "$sha_name") >/dev/null || _die "checksum verification failed for $zip_name"
         echo "  Checksum: $(_green "OK")" >&2
     else
@@ -315,13 +337,17 @@ PY
 }
 
 _self_cmd_update_stable() {
-    local repo="${1:-$_SELF_STABLE_REPO}" tmp_dir="" zip_path=""
+    local repo="${1:-$_SELF_STABLE_REPO}" tmp_dir="" zip_path="" force="${2:-0}"
     tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/cac-stable-update.XXXXXX")"
     echo "Updating cac Docker install to latest stable release ..."
-    zip_path="$(_self_download_latest_stable_release "$repo" "$tmp_dir")" || {
+    zip_path="$(_self_download_latest_stable_release "$repo" "$tmp_dir" "$force")" || {
         rm -rf "$tmp_dir"
         return 1
     }
+    if [[ "$zip_path" == "__CAC_ALREADY_CURRENT__" ]]; then
+        rm -rf "$tmp_dir"
+        return 0
+    fi
     _self_cmd_upgrade "$zip_path"
     rm -rf "$tmp_dir"
 }

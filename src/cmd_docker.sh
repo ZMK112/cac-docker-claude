@@ -964,18 +964,36 @@ _dk_cmd_destroy() {
 }
 
 _dk_cmd_update() {
-  local repo=""
-  if [[ "${1:-}" == "--repo" ]]; then
-    repo="${2:-}"
-    [[ -n "$repo" ]] || {
-      _err "Usage: cac docker update [--repo owner/repo]"
-      return 1
-    }
-  elif [[ -n "${1:-}" ]]; then
-    _err "Usage: cac docker update [--repo owner/repo]"
-    return 1
-  fi
-  _self_cmd_update_stable "$repo"
+  local repo="" force=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo)
+        repo="${2:-}"
+        [[ -n "$repo" ]] || {
+          _err "Usage: cac docker update [--force] [--repo owner/repo]"
+          return 1
+        }
+        shift 2
+        ;;
+      --repo=*)
+        repo="${1#--repo=}"
+        [[ -n "$repo" ]] || {
+          _err "Usage: cac docker update [--force] [--repo owner/repo]"
+          return 1
+        }
+        shift
+        ;;
+      --force)
+        force=1
+        shift
+        ;;
+      *)
+        _err "Usage: cac docker update [--force] [--repo owner/repo]"
+        return 1
+        ;;
+    esac
+  done
+  _self_cmd_update_stable "$repo" "$force"
 }
 
 # ── Docker command dispatcher ────────────────────────────────────────
@@ -1015,7 +1033,7 @@ Usage: cac docker <subcommand>
   port       Forward a localhost port to the container
   status     Show current status
   logs       Follow container logs
-  update     Update to the latest stable release with rollback
+  update     Update to the latest stable release with rollback; skips when current
   destroy    Remove container/network/images
 EOF
       ;;
