@@ -79,6 +79,24 @@ pass "docker-direct-cli"
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.20')" == "0.1.20" ]]
 pass "version-normalization"
 
+tmp_upgrade_zip="$(mktemp -d "${TMPDIR:-/tmp}/cac-upgrade-zip.XXXXXX")"
+mkdir -p "${tmp_upgrade_zip}/release-root"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${tmp_upgrade_zip}/release-root/install.sh"
+chmod +x "${tmp_upgrade_zip}/release-root/install.sh"
+(
+    cd "$tmp_upgrade_zip"
+    zip -qr release.zip release-root
+)
+upgrade_stdout="$(
+    bash -c 'source ./src/utils.sh; source ./src/cmd_self.sh; _self_find_install_dir "$1" "$2"' \
+        _ "${tmp_upgrade_zip}/release.zip" "${tmp_upgrade_zip}/unpacked" \
+        2>"${tmp_upgrade_zip}/stderr"
+)"
+[[ "$upgrade_stdout" == "${tmp_upgrade_zip}/unpacked/release-root" ]]
+grep -q "Unpacking release archive" "${tmp_upgrade_zip}/stderr"
+rm -rf "$tmp_upgrade_zip"
+pass "upgrade-zip-stdout"
+
 tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-path.XXXXXX")"
 trap 'rm -rf "$tmp_home"' EXIT
 cat > "${tmp_home}/.zshrc" <<'EOF'

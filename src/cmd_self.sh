@@ -102,7 +102,7 @@ _self_find_install_dir() {
         case "$source" in
             *.zip)
                 command -v unzip >/dev/null 2>&1 || _die "unzip is required to upgrade from a zip archive"
-                echo "Unpacking release archive ..."
+                echo "Unpacking release archive ..." >&2
                 unzip -q "$source" -d "$tmp_dir" &
                 _wait_with_progress "Unpacking release archive" "$!" || return 1
                 candidate="$(find "$tmp_dir" -maxdepth 2 -type f -name install.sh 2>/dev/null | head -n1)"
