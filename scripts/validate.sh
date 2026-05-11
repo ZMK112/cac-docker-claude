@@ -75,8 +75,8 @@ EOF
 rm -rf "$tmp_direct"
 pass "docker-direct-cli"
 
-[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.18')" == "0.1.18" ]]
-[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.18')" == "0.1.18" ]]
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.19')" == "0.1.19" ]]
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.19')" == "0.1.19" ]]
 pass "version-normalization"
 
 tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-path.XXXXXX")"

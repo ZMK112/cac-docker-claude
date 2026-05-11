@@ -11,9 +11,9 @@ VERSIONS_DIR="$CAC_DIR/versions"
 # ── utils: colors, read/write, UUID, proxy parsing ───────────────────────
 
 # shellcheck disable=SC2034  # used in build-concatenated cac script
-CAC_VERSION="0.1.18"
+CAC_VERSION="0.1.19"
 CAC_DOCKER_IMAGE_REPO="${CAC_DOCKER_IMAGE_REPO:-ghcr.io/zmk112/cac-docker-claude}"
-CAC_DOCKER_IMAGE_TAG="${CAC_DOCKER_IMAGE_TAG:-v0.1.18}"
+CAC_DOCKER_IMAGE_TAG="${CAC_DOCKER_IMAGE_TAG:-v0.1.19}"
 
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
 _die()    { printf '%b\n' "$(_red "error:") $*" >&2; exit 1; }
@@ -3291,13 +3291,13 @@ _dk_project_image_cleanup_candidates() {
 }
 
 _dk_prompt_cleanup_project_images() {
-  local candidates ref repo tag size created removed=0 failed=0
+  local candidates ref size created removed=0 failed=0
   candidates="$(_dk_project_image_cleanup_candidates)"
   [[ -n "$candidates" ]] || return 0
 
   echo ""
   _warn "Found old cac-docker-claude images that are not used by current containers."
-  while IFS=$'\t' read -r ref _repo _tag _size _created; do
+  while IFS=$'\t' read -r ref _repo _tag size created; do
     [[ -n "$ref" ]] || continue
     printf '  %s  %s  %s\n' "$ref" "${size:-unknown-size}" "${created:-unknown-age}"
   done <<< "$candidates"

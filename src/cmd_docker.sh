@@ -916,13 +916,13 @@ _dk_project_image_cleanup_candidates() {
 }
 
 _dk_prompt_cleanup_project_images() {
-  local candidates ref repo tag size created removed=0 failed=0
+  local candidates ref size created removed=0 failed=0
   candidates="$(_dk_project_image_cleanup_candidates)"
   [[ -n "$candidates" ]] || return 0
 
   echo ""
   _warn "Found old cac-docker-claude images that are not used by current containers."
-  while IFS=$'\t' read -r ref _repo _tag _size _created; do
+  while IFS=$'\t' read -r ref _repo _tag size created; do
     [[ -n "$ref" ]] || continue
     printf '  %s  %s  %s\n' "$ref" "${size:-unknown-size}" "${created:-unknown-age}"
   done <<< "$candidates"
