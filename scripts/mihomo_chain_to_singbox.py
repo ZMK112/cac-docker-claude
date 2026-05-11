@@ -300,29 +300,59 @@ def describe_chain(
 
 
 def dns_section(server: str, final_policy: str) -> dict[str, Any]:
+    return dns_section_with_direct(server, final_policy, server, [])
+
+
+def dns_server(tag: str, server: str, detour: str | None, *, legacy_https: bool = False) -> dict[str, Any]:
+    if legacy_https and server.startswith("https://"):
+        item: dict[str, Any] = {"tag": tag, "address": server}
+        if detour:
+            item["detour"] = detour
+        return item
+
     if server.startswith("https://"):
         parsed = urlparse(server)
         host = parsed.hostname or ""
-        remote: dict[str, Any] = {
+        item: dict[str, Any] = {
             "type": "https",
-            "tag": "remote-dns",
+            "tag": tag,
             "server": host,
             "server_port": parsed.port or 443,
             "path": parsed.path or "/dns-query",
-            "detour": final_policy,
         }
+        if detour:
+            item["detour"] = detour
         if host:
-            remote["tls"] = {
+            item["tls"] = {
                 "enabled": True,
                 "server_name": host if not host.replace(".", "").isdigit() else "cloudflare-dns.com",
             }
-        return {"servers": [remote], "final": "remote-dns", "strategy": "ipv4_only"}
+        return item
 
-    return {
-        "servers": [{"tag": "remote-dns", "address": server, "detour": final_policy}],
+    item: dict[str, Any] = {"tag": tag, "address": server}
+    if detour:
+        item["detour"] = detour
+    return item
+
+
+def dns_section_with_direct(
+    server: str,
+    final_policy: str,
+    direct_server: str,
+    direct_domain_keywords: list[str],
+) -> dict[str, Any]:
+    servers = [dns_server("remote-dns", server, final_policy)]
+    dns: dict[str, Any] = {
+        "servers": servers,
         "final": "remote-dns",
         "strategy": "ipv4_only",
     }
+    if direct_domain_keywords:
+        servers.insert(0, dns_server("direct-dns", direct_server, "internal-direct", legacy_https=True))
+        dns["rules"] = [
+            {"domain_keyword": direct_domain_keywords, "server": "direct-dns"},
+        ]
+    return dns
 
 
 def tun_inbound(address: str, mtu: int) -> dict[str, Any]:
@@ -388,6 +418,8 @@ def build_config(
     tun_mtu: int,
     internal_cidrs: list[str],
     internal_domains: list[str],
+    direct_domain_keywords: list[str],
+    direct_dns_server: str,
     inbound_mode: str,
     listen: str,
     listen_port: int,
@@ -414,6 +446,8 @@ def build_config(
         internal_rules.append({"ip_cidr": internal_cidrs, "outbound": "internal-direct"})
     if internal_domains:
         internal_rules.append({"domain": internal_domains, "outbound": "internal-direct"})
+    if direct_domain_keywords:
+        internal_rules.append({"domain_keyword": direct_domain_keywords, "outbound": "internal-direct"})
 
     ignored_direct = 0
     ignored_other = 0
@@ -442,7 +476,7 @@ def build_config(
 
     config = {
         "log": {"level": "info", "timestamp": True},
-        "dns": dns_section(dns_server, policy),
+        "dns": dns_section_with_direct(dns_server, policy, direct_dns_server, direct_domain_keywords),
         "inbounds": inbounds,
         "outbounds": outbounds,
         "route": {
@@ -462,6 +496,8 @@ def build_config(
         "ignored_other_rules": ignored_other,
         "internal_direct_cidrs": internal_cidrs,
         "internal_direct_domains": internal_domains,
+        "direct_domain_keywords": direct_domain_keywords,
+        "direct_dns_server": direct_dns_server,
         "route_final": policy,
         "inbound": inbound_summary,
     }
@@ -480,7 +516,7 @@ def verify_no_bypass(config: dict[str, Any], summary: dict[str, Any]) -> None:
         if outbound == policy:
             continue
         if outbound == "internal-direct":
-            if not any(key in rule for key in ("ip_cidr", "domain")):
+            if not any(key in rule for key in ("ip_cidr", "domain", "domain_keyword")):
                 raise SystemExit(f"internal-direct rule is too broad: {rule}")
             continue
         raise SystemExit(f"route rule bypasses chain policy: {outbound}")
@@ -540,6 +576,13 @@ def main() -> None:
     parser.add_argument("-o", "--output", type=Path, help="sing-box JSON output")
     parser.add_argument("--policy", default=DEFAULT_POLICY, help="Mihomo policy/group to use as route.final")
     parser.add_argument("--dns-server", default="https://1.1.1.1/dns-query")
+    parser.add_argument("--direct-dns-server", default="", help="DNS server used for direct domain keywords")
+    parser.add_argument(
+        "--direct-domain-keyword",
+        action="append",
+        default=[],
+        help="Domain keyword allowed to use internal-direct, with DNS resolved through direct DNS. Can be repeated or comma-separated.",
+    )
     parser.add_argument("--inbound-mode", choices=("tun", "mixed"), default="tun")
     parser.add_argument("--tun-address", default="172.19.0.1/30")
     parser.add_argument("--tun-mtu", type=int, default=9000)
@@ -571,6 +614,8 @@ def main() -> None:
     data = load_yaml(args.input)
     internal_cidrs = split_csv(args.internal_cidr)
     internal_domains = split_csv(args.internal_domain)
+    direct_domain_keywords = split_csv(args.direct_domain_keyword)
+    direct_dns_server = args.direct_dns_server.strip() or args.dns_server
     if not args.no_default_internal:
         internal_cidrs = DEFAULT_INTERNAL_CIDRS + internal_cidrs
         internal_domains = DEFAULT_INTERNAL_DOMAINS + internal_domains
@@ -584,6 +629,8 @@ def main() -> None:
         tun_mtu=args.tun_mtu,
         internal_cidrs=internal_cidrs,
         internal_domains=internal_domains,
+        direct_domain_keywords=direct_domain_keywords,
+        direct_dns_server=direct_dns_server,
         inbound_mode=args.inbound_mode,
         listen=args.listen,
         listen_port=args.listen_port,

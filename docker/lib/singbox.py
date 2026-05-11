@@ -13,16 +13,18 @@ def render(
     proxy: ProxyConfig,
     *,
     dns_server: str,
+    direct_dns_server: str,
+    direct_domain_keywords: list[str],
     tun_address: str,
     tun_mtu: int,
 ) -> dict[str, Any]:
     """Build a complete sing-box config dict."""
     return {
         "log": {"level": "warn"},
-        "dns": _dns_section(dns_server),
+        "dns": _dns_section(dns_server, direct_dns_server, direct_domain_keywords),
         "inbounds": [_tun_inbound(tun_address, tun_mtu)],
         "outbounds": [_outbound(proxy), {"type": "direct", "tag": "direct"}],
-        "route": _route_section(),
+        "route": _route_section(direct_domain_keywords),
     }
 
 
@@ -64,34 +66,51 @@ def render_proxy_bridge_json(proxy: ProxyConfig, **kwargs: Any) -> str:
     return json.dumps(render_proxy_bridge(proxy, **kwargs), indent=2)
 
 
-def _dns_section(server: str) -> dict:
+def _dns_server(tag: str, server: str, detour: str | None, *, legacy_https: bool = False) -> dict[str, Any]:
+    if legacy_https and server.startswith("https://"):
+        item: dict[str, Any] = {"tag": tag, "address": server}
+        if detour:
+            item["detour"] = detour
+        return item
+
     if server.startswith("https://"):
         parsed = urlparse(server)
         host = parsed.hostname or ""
         dns_server: dict[str, Any] = {
             "type": "https",
-            "tag": "remote-dns",
+            "tag": tag,
             "server": host,
             "server_port": parsed.port or 443,
             "path": parsed.path or "/dns-query",
-            "detour": "proxy",
         }
+        if detour:
+            dns_server["detour"] = detour
         if host:
             dns_server["tls"] = {
                 "enabled": True,
                 "server_name": host if not host.replace(".", "").isdigit() else "cloudflare-dns.com",
             }
-        return {
-            "servers": [dns_server],
-            "final": "remote-dns",
-            "strategy": "ipv4_only",
-        }
+        return dns_server
 
-    return {
-        "servers": [{"tag": "remote-dns", "address": server, "detour": "proxy"}],
+    item: dict[str, Any] = {"tag": tag, "address": server}
+    if detour:
+        item["detour"] = detour
+    return item
+
+
+def _dns_section(server: str, direct_server: str, direct_domain_keywords: list[str]) -> dict:
+    servers = [_dns_server("remote-dns", server, "proxy")]
+    dns: dict[str, Any] = {
+        "servers": servers,
         "final": "remote-dns",
         "strategy": "ipv4_only",
     }
+    if direct_domain_keywords:
+        servers.insert(0, _dns_server("direct-dns", direct_server, "direct", legacy_https=True))
+        dns["rules"] = [
+            {"domain_keyword": direct_domain_keywords, "server": "direct-dns"},
+        ]
+    return dns
 
 
 def _tun_inbound(address: str, mtu: int) -> dict:
@@ -108,13 +127,16 @@ def _tun_inbound(address: str, mtu: int) -> dict:
     }
 
 
-def _route_section() -> dict:
+def _route_section(direct_domain_keywords: list[str]) -> dict:
+    rules: list[dict[str, Any]] = [
+        {"action": "sniff"},
+        {"protocol": "dns", "action": "hijack-dns"},
+    ]
+    if direct_domain_keywords:
+        rules.append({"domain_keyword": direct_domain_keywords, "outbound": "direct"})
+    rules.append({"ip_is_private": True, "outbound": "direct"})
     return {
-        "rules": [
-            {"action": "sniff"},
-            {"protocol": "dns", "action": "hijack-dns"},
-            {"ip_is_private": True, "outbound": "direct"},
-        ],
+        "rules": rules,
         "final": "proxy",
         "auto_detect_interface": True,
     }

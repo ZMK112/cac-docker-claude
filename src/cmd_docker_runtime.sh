@@ -4,6 +4,19 @@ _dk_host_docker() {
   env -u DOCKER_HOST -u DOCKER_CONTEXT docker "$@"
 }
 
+_dk_container_state() {
+  local container_name state
+  container_name="${CAC_CONTAINER_NAME:-$(_dk_read_env CAC_CONTAINER_NAME)}"
+  container_name="${container_name:-boris-main}"
+  state="$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$state" && "$state" != "not created" ]]; then
+    printf '%s\n' "$state"
+    return 0
+  fi
+  state="$(_dk_host_docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null || true)"
+  printf '%s\n' "${state:-not created}"
+}
+
 _dk_default_image_ref() {
   printf '%s\n' "${CAC_DOCKER_IMAGE_REPO}:${CAC_DOCKER_IMAGE_TAG}"
 }

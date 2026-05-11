@@ -133,6 +133,7 @@ cac docker start
 | `cac docker status` | Show current container, image, proxy, port, and data status. | 查看容器、镜像、代理、端口和数据状态。 |
 | `cac docker logs` | Follow main container logs. | 跟随主容器日志。 |
 | `cac docker mount` | Manage extra host-directory mounts. | 管理额外挂载目录。 |
+| `cac docker direct` | Manage domain keywords that use direct DNS and direct route. | 管理 DNS 和访问都直连的域名关键词。 |
 | `cac docker port` | Forward a local host port to the container. | 把本机端口转发到容器。 |
 | `cac docker update` | Install latest stable release with rollback on failure. | 更新到最新 stable 版本，失败时自动回滚。 |
 | `cac docker destroy` | Remove containers/networks/images managed by this project. | 删除本项目管理的容器、网络和镜像。 |
@@ -192,6 +193,35 @@ When the setup input is an existing `.yaml` or `.yml` file, the setup flow treat
 
 中文：如果输入的是存在的 YAML/YML 文件，则启用 Mihomo YAML 链式代理迁移逻辑。外网流量经过 TUN 和链式代理；内部 Docker 网络、容器网络、必要局域网地址可以按规则直连，避免把内部控制流量错误送进代理。
 
+### Direct Domains for EAA/Internal Access
+
+Some enterprise access products, including Akamai EAA, authenticate on the host and expect selected internal domains to avoid the container proxy chain. Configure those domains explicitly:
+
+```env
+CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,timeresearch,rockbund
+CAC_DIRECT_DNS_SERVER=https://1.1.1.1/dns-query
+```
+
+This adds both sing-box DNS rules and route rules for matching domains. DNS for matching domains uses the direct DNS path, and the final connection uses `direct`; other traffic continues to use the configured proxy or YAML chain.
+
+中文：对于 EAA 或企业内网域名，可以设置 `CAC_DIRECT_DOMAIN_KEYWORDS`。匹配关键词的域名会使用直连 DNS，并且连接本身也直连，不进入 Docker 内部代理链。该配置默认关闭，避免影响历史稳定代理行为。
+
+Manage the keyword list with:
+
+```bash
+cac docker direct add akamai-access.com timeresearch rockbund
+cac docker direct ls
+cac docker direct rm timeresearch
+```
+
+中文：推荐使用 `cac docker direct add|ls|rm` 管理直连关键词。`add` 和 `rm` 会更新 `.env`；如果当前是 Mihomo YAML 链式模式，还会基于保存的 YAML 源文件重新生成 sing-box 配置，保证 DNS 直连和访问直连同时生效。
+
+After editing `~/.cac/docker/.env` manually, or after saving direct keyword changes without an immediate restart, restart:
+
+```bash
+cac docker restart
+```
+
 ## Network Model
 
 The runtime stack separates several responsibilities:
@@ -225,7 +255,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.16
+ghcr.io/zmk112/cac-docker-claude:v0.1.17
 ```
 
 Force a rebuild:
@@ -349,14 +379,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.16 bash scripts/package-source.sh
+PKG_VERSION=v0.1.17 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.16.zip
-dist/cac-docker-claude-source-v0.1.16.sha256
+dist/cac-docker-claude-source-v0.1.17.zip
+dist/cac-docker-claude-source-v0.1.17.sha256
 scripts/install-stable.sh
 ```
 

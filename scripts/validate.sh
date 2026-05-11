@@ -42,15 +42,41 @@ pass "build"
 ./cac docker help >/dev/null
 ./cac docker help | grep -q "start      Start the container; no-op if already running"
 ./cac docker help | grep -q "restart    Restart and remount the current directory as /workspace"
+./cac docker help | grep -q "direct     Manage domain keywords that use direct DNS and direct route"
 ./cac docker help | grep -q "update     Update to the latest stable release with rollback; skips when current"
+./cac docker direct help >/dev/null
 if ./cac env ls >/tmp/cac-docker-claude-local.out 2>&1; then
     printf 'local env command unexpectedly succeeded\n' >&2
     exit 1
 fi
 pass "docker-only-cli"
 
-[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.16')" == "0.1.16" ]]
-[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.16')" == "0.1.16" ]]
+tmp_direct="$(mktemp -d "${TMPDIR:-/tmp}/cac-direct-cli.XXXXXX")"
+mkdir -p "${tmp_direct}/docker"
+cp docker/docker-compose.yml "${tmp_direct}/docker/docker-compose.yml"
+cp cac "${tmp_direct}/cac"
+cat > "${tmp_direct}/docker/.env" <<'EOF'
+PROXY_URI=socks5h://host.docker.internal:17890
+CAC_PROXY_CONFIG_KIND=uri
+CAC_CONTAINER_NAME=cac-direct-test-missing
+CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,timeresearch
+CAC_DIRECT_DNS_SERVER=https://1.1.1.1/dns-query
+EOF
+(
+    cd "$tmp_direct"
+    CAC_DOCKER_BUILD_LOCAL=0 ./cac docker direct add rockbund timeresearch >/tmp/cac-direct-add.out
+    grep -q 'CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,timeresearch,rockbund' docker/.env
+    CAC_DOCKER_BUILD_LOCAL=0 ./cac docker direct rm timeresearch >/tmp/cac-direct-rm.out
+    grep -q 'CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,rockbund' docker/.env
+    CAC_DOCKER_BUILD_LOCAL=0 ./cac docker direct ls >/tmp/cac-direct-ls.out
+    grep -q 'akamai-access.com' /tmp/cac-direct-ls.out
+    grep -q 'rockbund' /tmp/cac-direct-ls.out
+)
+rm -rf "$tmp_direct"
+pass "docker-direct-cli"
+
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.17')" == "0.1.17" ]]
+[[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.17')" == "0.1.17" ]]
 pass "version-normalization"
 
 tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-path.XXXXXX")"

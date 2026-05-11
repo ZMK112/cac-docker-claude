@@ -58,6 +58,157 @@ _dk_print_mounts() {
   done <<< "$lines"
 }
 
+_dk_direct_keywords_update() {
+  local action="$1" current="$2"
+  shift 2
+  python3 - "$action" "$current" "$@" <<'PY'
+import re
+import sys
+
+action = sys.argv[1]
+current = sys.argv[2]
+inputs = sys.argv[3:]
+allowed = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def split(values):
+    out = []
+    for value in values:
+        for item in value.split(","):
+            item = item.strip().lower()
+            if item:
+                if not allowed.match(item):
+                    raise SystemExit(f"invalid direct domain keyword: {item}")
+                out.append(item)
+    return out
+
+
+items = []
+seen = set()
+for item in split([current]):
+    if item not in seen:
+        items.append(item)
+        seen.add(item)
+
+targets = split(inputs)
+if action == "add":
+    for item in targets:
+        if item not in seen:
+            items.append(item)
+            seen.add(item)
+elif action == "rm":
+    remove = set(targets)
+    items = [item for item in items if item not in remove]
+else:
+    raise SystemExit(f"unknown action: {action}")
+
+print(",".join(items))
+PY
+}
+
+_dk_direct_keywords_print() {
+  local raw="$1"
+  python3 - "$raw" <<'PY'
+import sys
+
+items = []
+seen = set()
+for item in sys.argv[1].split(","):
+    item = item.strip()
+    if item and item not in seen:
+        items.append(item)
+        seen.add(item)
+
+for item in items:
+    print(item)
+PY
+}
+
+_dk_refresh_mihomo_chain_configs() {
+  local proxy_chain_yaml="${1:-}" control_subnet="${2:-}" proxy_kind converter chain_policy chain_internal_cidrs chain_internal_domains chain_direct_keywords chain_direct_dns bridge_user bridge_password bridge_port dns_server tun_address tun_mtu main_cfg bridge_cfg main_b64 bridge_b64
+  local -a chain_extra_args=()
+
+  proxy_kind="${CAC_PROXY_CONFIG_KIND:-$(_dk_read_env CAC_PROXY_CONFIG_KIND)}"
+  [[ "$proxy_kind" == "mihomo-chain" ]] || return 0
+
+  proxy_chain_yaml="${proxy_chain_yaml:-${CAC_PROXY_CHAIN_SOURCE:-$(_dk_read_env CAC_PROXY_CHAIN_SOURCE)}}"
+  if [[ -z "$proxy_chain_yaml" || ! -f "$proxy_chain_yaml" ]]; then
+    _err "Cannot refresh Mihomo chain config because CAC_PROXY_CHAIN_SOURCE is missing or unreadable."
+    _info "Run \033[1mcac docker setup\033[0m again with the original YAML file, then retry."
+    return 1
+  fi
+
+  converter="$(_dk_chain_converter_script)"
+  [[ -f "$converter" ]] || {
+    _err "Cannot find Mihomo-to-sing-box converter: $converter"
+    return 1
+  }
+
+  control_subnet="${control_subnet:-${CAC_DOCKER_CONTROL_SUBNET:-$(_dk_read_env CAC_DOCKER_CONTROL_SUBNET)}}"
+  control_subnet="${control_subnet:-172.31.255.0/24}"
+  chain_policy="${CAC_PROXY_CHAIN_POLICY:-$(_dk_read_env CAC_PROXY_CHAIN_POLICY)}"
+  chain_policy="${chain_policy:-Claude-专用链路}"
+  chain_internal_cidrs="${CAC_PROXY_CHAIN_INTERNAL_CIDRS:-$(_dk_read_env CAC_PROXY_CHAIN_INTERNAL_CIDRS)}"
+  chain_internal_domains="${CAC_PROXY_CHAIN_INTERNAL_DOMAINS:-$(_dk_read_env CAC_PROXY_CHAIN_INTERNAL_DOMAINS)}"
+  chain_direct_keywords="${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}"
+  chain_direct_dns="${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}"
+  dns_server="${DNS_SERVER:-$(_dk_read_env DNS_SERVER)}"
+  dns_server="${dns_server:-https://1.1.1.1/dns-query}"
+  tun_address="${TUN_ADDRESS:-$(_dk_read_env TUN_ADDRESS)}"
+  tun_address="${tun_address:-172.19.0.1/30}"
+  tun_mtu="${TUN_MTU:-$(_dk_read_env TUN_MTU)}"
+  tun_mtu="${tun_mtu:-9000}"
+  bridge_user="${CAC_CHILD_PROXY_BRIDGE_USER:-$(_dk_read_env CAC_CHILD_PROXY_BRIDGE_USER)}"
+  bridge_user="${bridge_user:-cacbridge}"
+  bridge_password="${CAC_CHILD_PROXY_BRIDGE_PASSWORD:-$(_dk_read_env CAC_CHILD_PROXY_BRIDGE_PASSWORD)}"
+  bridge_port="${CAC_CHILD_PROXY_BRIDGE_PORT:-$(_dk_read_env CAC_CHILD_PROXY_BRIDGE_PORT)}"
+  bridge_port="${bridge_port:-17891}"
+
+  [[ -n "$chain_internal_cidrs" ]] && chain_extra_args+=(--internal-cidr "$chain_internal_cidrs")
+  [[ -n "$chain_internal_domains" ]] && chain_extra_args+=(--internal-domain "$chain_internal_domains")
+  [[ -n "$chain_direct_keywords" ]] && chain_extra_args+=(--direct-domain-keyword "$chain_direct_keywords")
+  [[ -n "$chain_direct_dns" ]] && chain_extra_args+=(--direct-dns-server "$chain_direct_dns")
+
+  main_cfg="$(mktemp)"
+  bridge_cfg="$(mktemp)"
+  if ! python3 "$converter" "$proxy_chain_yaml" \
+    --policy "$chain_policy" \
+    --dns-server "$dns_server" \
+    --tun-address "$tun_address" \
+    --tun-mtu "$tun_mtu" \
+    --internal-cidr "$control_subnet" \
+    ${chain_extra_args[@]+"${chain_extra_args[@]}"} \
+    --verify-no-bypass \
+    -o "$main_cfg"; then
+    rm -f "$main_cfg" "$bridge_cfg"
+    _err "Failed to convert Mihomo YAML to sing-box TUN config"
+    return 1
+  fi
+  if ! python3 "$converter" "$proxy_chain_yaml" \
+    --policy "$chain_policy" \
+    --dns-server "$dns_server" \
+    --inbound-mode mixed \
+    --listen 0.0.0.0 \
+    --listen-port "$bridge_port" \
+    --listen-user "$bridge_user" \
+    --listen-password "$bridge_password" \
+    --internal-cidr "$control_subnet" \
+    ${chain_extra_args[@]+"${chain_extra_args[@]}"} \
+    --verify-no-bypass \
+    -o "$bridge_cfg"; then
+    rm -f "$main_cfg" "$bridge_cfg"
+    _err "Failed to convert Mihomo YAML to proxy-bridge sing-box config"
+    return 1
+  fi
+  main_b64="$(_dk_file_b64 "$main_cfg")"
+  bridge_b64="$(_dk_file_b64 "$bridge_cfg")"
+  rm -f "$main_cfg" "$bridge_cfg"
+  _dk_write_env CAC_SINGBOX_CONFIG_B64 "$main_b64"
+  _dk_write_env CAC_PROXY_BRIDGE_CONFIG_B64 "$bridge_b64"
+  _dk_write_env CAC_PROXY_CHAIN_POLICY "$chain_policy"
+  _dk_write_env CAC_PROXY_CHAIN_SOURCE "$proxy_chain_yaml"
+}
+
 _dk_cmd_mount() {
   _dk_init || return 1
   local action="${1:-}"
@@ -91,7 +242,7 @@ _dk_cmd_mount() {
       fi
 
       existing_host="$(_dk_mounts_get_host_for_target "$target_path")"
-      current_state="$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")"
+      current_state="$(_dk_container_state)"
 
       echo ""
       printf "\033[1mcac docker mount add\033[0m\n"
@@ -158,7 +309,7 @@ _dk_cmd_mount() {
         _err "No mount is configured for ${target_path}"
         return 1
       fi
-      current_state="$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")"
+      current_state="$(_dk_container_state)"
 
       echo ""
       printf "\033[1mcac docker mount rm\033[0m\n"
@@ -219,6 +370,109 @@ EOF
   esac
 }
 
+_dk_cmd_direct() {
+  _dk_init || return 1
+  local action="${1:-}" current="" updated="" dns_server="" state="" changed=0
+  shift 2>/dev/null || true
+  _dk_load_env
+
+  case "$action" in
+    add)
+      if [[ "$#" -lt 1 ]]; then
+        _err "Usage: cac docker direct add <keyword> [keyword...]"
+        return 1
+      fi
+      current="$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)"
+      updated="$(_dk_direct_keywords_update add "$current" "$@")" || return 1
+      if [[ "$updated" == "$current" ]]; then
+        _ok "Direct domain keywords unchanged"
+      else
+        _dk_write_env CAC_DIRECT_DOMAIN_KEYWORDS "$updated"
+        _dk_load_env
+        _dk_refresh_mihomo_chain_configs || return 1
+        _ok "Direct domain keyword(s) saved"
+        changed=1
+      fi
+      ;;
+    ls|list)
+      current="$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)"
+      dns_server="$(_dk_read_env CAC_DIRECT_DNS_SERVER)"
+      dns_server="${dns_server:-$(_dk_read_env DNS_SERVER)}"
+      dns_server="${dns_server:-https://1.1.1.1/dns-query}"
+      echo ""
+      printf "\033[1mcac docker direct ls\033[0m\n"
+      echo ""
+      _info "Direct DNS: \033[1m${dns_server}\033[0m"
+      if [[ -z "$current" ]]; then
+        _info "No direct domain keywords configured."
+      else
+        _info "Direct domain keywords:"
+        _dk_direct_keywords_print "$current" | sed 's/^/  - /'
+      fi
+      return 0
+      ;;
+    rm|remove|del|delete)
+      if [[ "$#" -lt 1 ]]; then
+        _err "Usage: cac docker direct rm <keyword> [keyword...]"
+        return 1
+      fi
+      current="$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)"
+      updated="$(_dk_direct_keywords_update rm "$current" "$@")" || return 1
+      if [[ "$updated" == "$current" ]]; then
+        _ok "Direct domain keywords unchanged"
+      else
+        if [[ -n "$updated" ]]; then
+          _dk_write_env CAC_DIRECT_DOMAIN_KEYWORDS "$updated"
+        else
+          _dk_delete_env_keys CAC_DIRECT_DOMAIN_KEYWORDS
+        fi
+        _dk_load_env
+        _dk_refresh_mihomo_chain_configs || return 1
+        _ok "Direct domain keyword(s) removed"
+        changed=1
+      fi
+      ;;
+    ""|help|-h|--help)
+      cat <<'EOF'
+Usage: cac docker direct <subcommand>
+
+  add <keyword> [keyword...]   Add domain keywords that use direct DNS and direct route
+  ls                           List direct domain keywords
+  rm <keyword> [keyword...]    Remove direct domain keywords
+
+Examples:
+  cac docker direct add akamai-access.com timeresearch rockbund
+  cac docker direct ls
+  cac docker direct rm timeresearch
+EOF
+      return 0
+      ;;
+    *)
+      _err "Unknown docker direct subcommand: $action"
+      _info "Use: cac docker direct help"
+      return 1
+      ;;
+  esac
+
+  _dk_cmd_direct ls
+  if [[ "$changed" -eq 0 ]]; then
+    return 0
+  fi
+  state="$(_dk_container_state)"
+  if [[ "$state" == "running" ]]; then
+    echo ""
+    _warn "The running container still uses its current sing-box runtime config."
+    if _dk_prompt_yes_no "Restart now to apply direct domain changes?" "N"; then
+      _dk_cmd_restart || return 1
+      _info "Next: \033[1mcac docker check\033[0m"
+    else
+      _info "Saved only. Apply later with: \033[1mcac docker restart\033[0m"
+    fi
+  else
+    _info "Changes will apply on the next create/start/restart."
+  fi
+}
+
 # ── Docker subcommands ───────────────────────────────────────────────
 
 _dk_cmd_setup() {
@@ -230,7 +484,7 @@ _dk_cmd_setup() {
   local proxy prompt_proxy_default mode detected_mode docker_dir data_dir prior_data_dir data_dir_abs prior_data_dir_abs data_state_summary container_name runtime_hostname gateway_name child_proxy child_no_proxy image_ref ssh_enabled ssh_bind ssh_port ssh_password web_enabled web_port web_bind current_state prior_proxy prior_proxy_kind proxy_kind="uri" proxy_chain_yaml="" proxy_changed=0 proxy_probe_ok=0 running_workspace new_workspace preferred_shell shell_choice shell_changed=0 data_dir_changed=0 restart_reason="saved settings" control_subnet proxy_ip client_ip bridge_ip
   prior_proxy="$(_dk_read_env PROXY_URI)"
   prior_proxy_kind="$(_dk_read_env CAC_PROXY_CONFIG_KIND)"
-  current_state="$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")"
+  current_state="$(_dk_container_state)"
   prompt_proxy_default="$prior_proxy"
   [[ "$prior_proxy_kind" == "mihomo-chain" ]] && prompt_proxy_default=""
   proxy=$(_dk_prompt_value "Proxy URI (host:port, http:// / socks5h://, YAML path, or share links socks:// / ss:// / vmess:// / vless:// / trojan://)" "$prompt_proxy_default" 1) || return 1
@@ -378,57 +632,8 @@ _dk_cmd_setup() {
   child_no_proxy="${child_no_proxy:-$(_dk_default_child_no_proxy "$mode")}"
 
   if [[ "$proxy_kind" == "mihomo-chain" ]]; then
-    local converter chain_policy chain_internal_cidrs chain_internal_domains bridge_user bridge_password bridge_port main_cfg bridge_cfg main_b64 bridge_b64
-    local -a chain_extra_args=()
-    converter="$(_dk_chain_converter_script)"
-    [[ -f "$converter" ]] || {
-      _err "Cannot find Mihomo-to-sing-box converter: $converter"
-      return 1
-    }
-    chain_policy="${CAC_PROXY_CHAIN_POLICY:-$(_dk_read_env CAC_PROXY_CHAIN_POLICY)}"
-    chain_policy="${chain_policy:-Claude-专用链路}"
-    chain_internal_cidrs="${CAC_PROXY_CHAIN_INTERNAL_CIDRS:-$(_dk_read_env CAC_PROXY_CHAIN_INTERNAL_CIDRS)}"
-    chain_internal_domains="${CAC_PROXY_CHAIN_INTERNAL_DOMAINS:-$(_dk_read_env CAC_PROXY_CHAIN_INTERNAL_DOMAINS)}"
-    [[ -n "$chain_internal_cidrs" ]] && chain_extra_args+=(--internal-cidr "$chain_internal_cidrs")
-    [[ -n "$chain_internal_domains" ]] && chain_extra_args+=(--internal-domain "$chain_internal_domains")
-    bridge_user="${CAC_CHILD_PROXY_BRIDGE_USER:-$(_dk_read_env CAC_CHILD_PROXY_BRIDGE_USER)}"
-    bridge_user="${bridge_user:-cacbridge}"
-    bridge_password="${CAC_CHILD_PROXY_BRIDGE_PASSWORD:-$(_dk_read_env CAC_CHILD_PROXY_BRIDGE_PASSWORD)}"
-    bridge_port="${CAC_CHILD_PROXY_BRIDGE_PORT:-$(_dk_read_env CAC_CHILD_PROXY_BRIDGE_PORT)}"
-    bridge_port="${bridge_port:-17891}"
-    main_cfg="$(mktemp)"
-    bridge_cfg="$(mktemp)"
-    if ! python3 "$converter" "$proxy_chain_yaml" \
-      --policy "$chain_policy" \
-      --internal-cidr "$control_subnet" \
-      ${chain_extra_args[@]+"${chain_extra_args[@]}"} \
-      --verify-no-bypass \
-      -o "$main_cfg"; then
-      rm -f "$main_cfg" "$bridge_cfg"
-      _err "Failed to convert Mihomo YAML to sing-box TUN config"
-      return 1
-    fi
-    if ! python3 "$converter" "$proxy_chain_yaml" \
-      --policy "$chain_policy" \
-      --inbound-mode mixed \
-      --listen 0.0.0.0 \
-      --listen-port "$bridge_port" \
-      --listen-user "$bridge_user" \
-      --listen-password "$bridge_password" \
-      --internal-cidr "$control_subnet" \
-      ${chain_extra_args[@]+"${chain_extra_args[@]}"} \
-      --verify-no-bypass \
-      -o "$bridge_cfg"; then
-      rm -f "$main_cfg" "$bridge_cfg"
-      _err "Failed to convert Mihomo YAML to proxy-bridge sing-box config"
-      return 1
-    fi
-    main_b64="$(_dk_file_b64 "$main_cfg")"
-    bridge_b64="$(_dk_file_b64 "$bridge_cfg")"
-    rm -f "$main_cfg" "$bridge_cfg"
-    _dk_write_env CAC_SINGBOX_CONFIG_B64 "$main_b64"
-    _dk_write_env CAC_PROXY_BRIDGE_CONFIG_B64 "$bridge_b64"
-    _dk_write_env CAC_PROXY_CHAIN_POLICY "$chain_policy"
+    _dk_write_env CAC_PROXY_CHAIN_SOURCE "$proxy_chain_yaml"
+    _dk_refresh_mihomo_chain_configs "$proxy_chain_yaml" "$control_subnet" || return 1
   else
     _dk_delete_env_keys CAC_SINGBOX_CONFIG_B64 CAC_PROXY_BRIDGE_CONFIG_B64 CAC_PROXY_CHAIN_SOURCE CAC_PROXY_CHAIN_POLICY
   fi
@@ -466,6 +671,10 @@ _dk_cmd_setup() {
   _dk_write_env CAC_HOST_WEB_BIND "$web_bind"
   _dk_write_env CAC_HOST_WEB_PORT "$web_port"
   _dk_write_env CAC_FAKE_SHELL "$preferred_shell"
+  [[ -n "${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}" ]] && \
+    _dk_write_env CAC_DIRECT_DOMAIN_KEYWORDS "${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}"
+  [[ -n "${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}" ]] && \
+    _dk_write_env CAC_DIRECT_DNS_SERVER "${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}"
   if [[ -f "$_dk_env_file" ]]; then
     local cleanup_tmp
     cleanup_tmp=$(mktemp)
@@ -575,7 +784,7 @@ _dk_cmd_start() {
   local ssh_enabled ssh_port web_port current_state running_workspace requested_workspace
   [[ ! -f "$_dk_env_file" ]] && { _warn "No config found, running setup first..."; _dk_cmd_setup; }
   _dk_load_env
-  current_state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")
+  current_state="$(_dk_container_state)"
   if [[ "$current_state" == "running" ]]; then
     running_workspace="$(_dk_workspace_host_current 2>/dev/null || echo "")"
     requested_workspace="$(_dk_workspace_host_abs 2>/dev/null || echo "")"
@@ -613,7 +822,7 @@ _dk_cmd_start() {
 
   local state
   if _dk_wait_runtime_ready; then
-    state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "unknown")
+    state="$(_dk_container_state)"
     ssh_enabled="${CAC_ENABLE_SSH:-$(_dk_read_env CAC_ENABLE_SSH)}"
     ssh_enabled="${ssh_enabled:-1}"
     ssh_port="${CAC_HOST_SSH_PORT:-$(_dk_read_env CAC_HOST_SSH_PORT)}"
@@ -632,7 +841,7 @@ _dk_cmd_start() {
     _info "Forward port: \033[1mcac docker port <port>\033[0m"
     _info "Workspace:    \033[1m/workspace\033[0m (host: $(_dk_workspace_host_current 2>/dev/null || echo unset))"
   else
-    state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "unknown")
+    state="$(_dk_container_state)"
     _err "Container state: $state"
     _dk_abort_startup
     _info "Logs: cac docker logs"
@@ -743,7 +952,7 @@ _dk_prompt_cleanup_project_images() {
 _dk_cmd_rebuild() {
   _dk_init || return 1
   local state="not created"
-  state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")
+  state="$(_dk_container_state)"
 
   CAC_DOCKER_REBUILD=1 _dk_cmd_create || return 1
 
@@ -942,7 +1151,7 @@ _dk_cmd_status() {
   [[ "$web_enabled" != "0" ]] && printf "  Web UI:     http://127.0.0.1:%s\n" "$web_port"
 
   local state
-  state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "not created")
+  state="$(_dk_container_state)"
   case "$state" in
     running) printf "  Status:     \033[32mrunning\033[0m\n" ;;
     *)       printf "  Status:     \033[33m%s\033[0m\n" "$state" ;;
@@ -1019,6 +1228,7 @@ cmd_docker() {
     restart)  _dk_cmd_restart ;;
     enter)    _dk_cmd_enter ;;
     mount)    _dk_cmd_mount "$@" ;;
+    direct)   _dk_cmd_direct "$@" ;;
     check)    _dk_cmd_check ;;
     port)     _dk_cmd_port "$@" ;;
     status)   _dk_cmd_status ;;
@@ -1037,6 +1247,7 @@ Usage: cac docker <subcommand>
   restart    Restart and remount the current directory as /workspace
   enter      Shell into the container
   mount      Manage extra host-directory mounts
+  direct     Manage domain keywords that use direct DNS and direct route
   check      Diagnostics (network + identity)
   port       Forward a localhost port to the container
   status     Show current status

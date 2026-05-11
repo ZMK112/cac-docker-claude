@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
 
   cac:
-    image: ${CAC_DOCKER_IMAGE:-ghcr.io/zmk112/cac-docker-claude:v0.1.16}
+    image: ${CAC_DOCKER_IMAGE:-ghcr.io/zmk112/cac-docker-claude:v0.1.17}
     container_name: ${CAC_CONTAINER_NAME:-boris-main}
     hostname: ${CAC_CONTAINER_RUNTIME_HOSTNAME:-boris-main}
     depends_on:
@@ -51,6 +51,8 @@ services:
       CAC_SINGBOX_CONFIG_B64: ${CAC_SINGBOX_CONFIG_B64:-}
       SINGBOX_ENABLE: ${SINGBOX_ENABLE:-1}
       DNS_SERVER: ${DNS_SERVER:-https://1.1.1.1/dns-query}
+      CAC_DIRECT_DOMAIN_KEYWORDS: ${CAC_DIRECT_DOMAIN_KEYWORDS:-}
+      CAC_DIRECT_DNS_SERVER: ${CAC_DIRECT_DNS_SERVER:-}
       TUN_ADDRESS: ${TUN_ADDRESS:-172.19.0.1/30}
       TUN_MTU: ${TUN_MTU:-9000}
       DISABLE_IPV6: ${DISABLE_IPV6:-1}
