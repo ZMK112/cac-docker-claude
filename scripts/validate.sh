@@ -60,7 +60,6 @@ PROXY_URI=socks5h://host.docker.internal:17890
 CAC_PROXY_CONFIG_KIND=uri
 CAC_CONTAINER_NAME=cac-direct-test-missing
 CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,timeresearch
-CAC_DIRECT_DNS_SERVER=https://1.1.1.1/dns-query
 EOF
 (
     cd "$tmp_direct"
@@ -69,11 +68,64 @@ EOF
     CAC_DOCKER_BUILD_LOCAL=0 ./cac docker direct rm timeresearch >/tmp/cac-direct-rm.out
     grep -q 'CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,rockbund' docker/.env
     CAC_DOCKER_BUILD_LOCAL=0 ./cac docker direct ls >/tmp/cac-direct-ls.out
+    grep -q 'Direct DNS: .*127.0.0.11' /tmp/cac-direct-ls.out
     grep -q 'akamai-access.com' /tmp/cac-direct-ls.out
     grep -q 'rockbund' /tmp/cac-direct-ls.out
 )
 rm -rf "$tmp_direct"
 pass "docker-direct-cli"
+
+python3 - <<'PY'
+import json
+import os
+import sys
+sys.path.insert(0, os.path.abspath("docker"))
+from lib.protocols import parse
+from lib.singbox import render
+
+cfg = render(
+    parse("socks5://127.0.0.1:1080"),
+    dns_server="https://1.1.1.1/dns-query",
+    direct_dns_server="127.0.0.11",
+    direct_domain_keywords=["timeresearch"],
+    tun_address="172.19.0.1/30",
+    tun_mtu=9000,
+)
+servers = cfg["dns"]["servers"]
+direct = next(item for item in servers if item["tag"] == "direct-dns")
+assert direct["address"] == "127.0.0.11", json.dumps(direct)
+assert cfg["dns"]["rules"][0]["domain_keyword"] == ["timeresearch"]
+assert any(rule.get("domain_keyword") == ["timeresearch"] and rule.get("outbound") == "direct" for rule in cfg["route"]["rules"])
+PY
+pass "direct-dns-default"
+
+tmp_chain="$(mktemp -d "${TMPDIR:-/tmp}/cac-chain-direct-dns.XXXXXX")"
+cat > "${tmp_chain}/chain.yaml" <<'EOF'
+proxies:
+  - name: jump
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+proxy-groups:
+  - name: Claude-专用链路
+    type: select
+    proxies:
+      - jump
+rules:
+  - MATCH,Claude-专用链路
+EOF
+python3 scripts/mihomo_chain_to_singbox.py "${tmp_chain}/chain.yaml" \
+    --direct-domain-keyword timeresearch \
+    -o "${tmp_chain}/sing-box.json" >/dev/null
+python3 - "${tmp_chain}/sing-box.json" <<'PY'
+import json
+import sys
+cfg = json.load(open(sys.argv[1]))
+direct = next(item for item in cfg["dns"]["servers"] if item["tag"] == "direct-dns")
+assert direct["address"] == "127.0.0.11", json.dumps(direct)
+PY
+rm -rf "$tmp_chain"
+pass "mihomo-direct-dns-default"
 
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.20')" == "0.1.20" ]]
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.20')" == "0.1.20" ]]

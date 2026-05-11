@@ -199,12 +199,12 @@ Some enterprise access products, including Akamai EAA, authenticate on the host 
 
 ```env
 CAC_DIRECT_DOMAIN_KEYWORDS=akamai-access.com,timeresearch,rockbund
-CAC_DIRECT_DNS_SERVER=https://1.1.1.1/dns-query
+CAC_DIRECT_DNS_SERVER=127.0.0.11
 ```
 
-This adds both sing-box DNS rules and route rules for matching domains. DNS for matching domains uses the direct DNS path, and the final connection uses `direct`; other traffic continues to use the configured proxy or YAML chain.
+This adds both sing-box DNS rules and route rules for matching domains. DNS for matching domains uses the direct DNS path, and the final connection uses `direct`; other traffic continues to use the configured proxy or YAML chain. The default direct DNS server is Docker's embedded resolver `127.0.0.11`, so EAA and internal domains can follow the host/Docker DNS path instead of being sent to a public DoH resolver.
 
-中文：对于 EAA 或企业内网域名，可以设置 `CAC_DIRECT_DOMAIN_KEYWORDS`。匹配关键词的域名会使用直连 DNS，并且连接本身也直连，不进入 Docker 内部代理链。该配置默认包含 `akamai-access.com,timeresearch,rockbund`，用于常见 EAA 内网访问；如不需要可用 `cac docker direct rm` 删除。
+中文：对于 EAA 或企业内网域名，可以设置 `CAC_DIRECT_DOMAIN_KEYWORDS`。匹配关键词的域名会使用直连 DNS，并且连接本身也直连，不进入 Docker 内部代理链。直连 DNS 默认使用 Docker 内置解析器 `127.0.0.11`，避免公司内网域名被送到公网 DoH。该配置默认包含 `akamai-access.com,timeresearch,rockbund`，用于常见 EAA 内网访问；如不需要可用 `cac docker direct rm` 删除。
 
 Manage the keyword list with:
 
@@ -255,7 +255,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.22
+ghcr.io/zmk112/cac-docker-claude:v0.1.23
 ```
 
 Force a rebuild:
@@ -379,14 +379,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.22 bash scripts/package-source.sh
+PKG_VERSION=v0.1.23 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.22.zip
-dist/cac-docker-claude-source-v0.1.22.sha256
+dist/cac-docker-claude-source-v0.1.23.zip
+dist/cac-docker-claude-source-v0.1.23.sha256
 scripts/install-stable.sh
 ```
 

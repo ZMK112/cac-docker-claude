@@ -576,7 +576,7 @@ def main() -> None:
     parser.add_argument("-o", "--output", type=Path, help="sing-box JSON output")
     parser.add_argument("--policy", default=DEFAULT_POLICY, help="Mihomo policy/group to use as route.final")
     parser.add_argument("--dns-server", default="https://1.1.1.1/dns-query")
-    parser.add_argument("--direct-dns-server", default="", help="DNS server used for direct domain keywords")
+    parser.add_argument("--direct-dns-server", default="127.0.0.11", help="DNS server used for direct domain keywords")
     parser.add_argument(
         "--direct-domain-keyword",
         action="append",
@@ -615,7 +615,7 @@ def main() -> None:
     internal_cidrs = split_csv(args.internal_cidr)
     internal_domains = split_csv(args.internal_domain)
     direct_domain_keywords = split_csv(args.direct_domain_keyword)
-    direct_dns_server = args.direct_dns_server.strip() or args.dns_server
+    direct_dns_server = args.direct_dns_server.strip() or "127.0.0.11"
     if not args.no_default_internal:
         internal_cidrs = DEFAULT_INTERNAL_CIDRS + internal_cidrs
         internal_domains = DEFAULT_INTERNAL_DOMAINS + internal_domains

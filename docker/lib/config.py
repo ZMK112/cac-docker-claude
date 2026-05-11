@@ -36,7 +36,7 @@ def main() -> None:
         except OSError:
             pass
     dns = os.environ.get("DNS_SERVER", "https://1.1.1.1/dns-query")
-    direct_dns = os.environ.get("CAC_DIRECT_DNS_SERVER", "").strip() or dns
+    direct_dns = os.environ.get("CAC_DIRECT_DNS_SERVER", "").strip() or "127.0.0.11"
     direct_keywords = split_csv(os.environ.get("CAC_DIRECT_DOMAIN_KEYWORDS", "akamai-access.com,timeresearch,rockbund"))
     tun_addr = os.environ.get("TUN_ADDRESS", "172.19.0.1/30")
     tun_mtu = int(os.environ.get("TUN_MTU", "9000"))

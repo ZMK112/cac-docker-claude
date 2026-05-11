@@ -153,6 +153,7 @@ _dk_refresh_mihomo_chain_configs() {
   chain_direct_keywords="${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}"
   chain_direct_keywords="${chain_direct_keywords:-akamai-access.com,timeresearch,rockbund}"
   chain_direct_dns="${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}"
+  chain_direct_dns="${chain_direct_dns:-127.0.0.11}"
   dns_server="${DNS_SERVER:-$(_dk_read_env DNS_SERVER)}"
   dns_server="${dns_server:-https://1.1.1.1/dns-query}"
   tun_address="${TUN_ADDRESS:-$(_dk_read_env TUN_ADDRESS)}"
@@ -398,8 +399,7 @@ _dk_cmd_direct() {
     ls|list)
       current="$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)"
       dns_server="$(_dk_read_env CAC_DIRECT_DNS_SERVER)"
-      dns_server="${dns_server:-$(_dk_read_env DNS_SERVER)}"
-      dns_server="${dns_server:-https://1.1.1.1/dns-query}"
+      dns_server="${dns_server:-127.0.0.11}"
       echo ""
       printf "\033[1mcac docker direct ls\033[0m\n"
       echo ""
