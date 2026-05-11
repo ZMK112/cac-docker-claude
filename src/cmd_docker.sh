@@ -1,4 +1,5 @@
 # ── cac docker — runtime, subcommands, and dispatcher ───────────────
+# shellcheck disable=SC2154  # globals are defined in cmd_docker_common.sh before concatenation
 
 _dk_run_cac_check() {
   local out="/tmp/cac-docker-check.out"
@@ -7,8 +8,7 @@ _dk_run_cac_check() {
 
   _dk_compose exec -T "$_dk_service" sh -lc "rm -f '$out' '$rc'; (cac-check >'$out' 2>&1; printf '%s' \$? >'$rc') &" >/dev/null
 
-  local i
-  for i in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     line_count="$(
       _dk_compose exec -T "$_dk_service" sh -lc "test -f '$out' && wc -l < '$out'" 2>/dev/null |
         tr -d '\r\n'
@@ -45,7 +45,7 @@ _dk_probe_mount_writable() {
 }
 
 _dk_print_mounts() {
-  local lines line host_path target_path mode
+  local lines host_path target_path mode
   lines="$(_dk_mounts_list_tsv)"
   if [[ -z "$lines" ]]; then
     _info "No extra Docker mounts configured."
@@ -216,7 +216,7 @@ _dk_cmd_mount() {
 
   case "$action" in
     add)
-      local host_input="${1:-}" target_input="${2:-}" host_path="" target_path="" current_state existing_host recreate_workspace="" restart_now=1
+      local host_input="${1:-}" target_input="${2:-}" host_path="" target_path="" current_state existing_host recreate_workspace=""
       if [[ -z "$host_input" ]]; then
         _err "Usage: cac docker mount add <host_dir> [container_path]"
         return 1
@@ -481,7 +481,7 @@ _dk_cmd_setup() {
   printf "\033[1mcac docker setup\033[0m\n"
   echo ""
 
-  local proxy prompt_proxy_default mode detected_mode docker_dir data_dir prior_data_dir data_dir_abs prior_data_dir_abs data_state_summary container_name runtime_hostname gateway_name child_proxy child_no_proxy image_ref ssh_enabled ssh_bind ssh_port ssh_password web_enabled web_port web_bind current_state prior_proxy prior_proxy_kind proxy_kind="uri" proxy_chain_yaml="" proxy_changed=0 proxy_probe_ok=0 running_workspace new_workspace preferred_shell shell_choice shell_changed=0 data_dir_changed=0 restart_reason="saved settings" control_subnet proxy_ip client_ip bridge_ip
+  local proxy prompt_proxy_default mode detected_mode docker_dir data_dir prior_data_dir data_dir_abs prior_data_dir_abs data_state_summary container_name runtime_hostname gateway_name child_proxy child_no_proxy image_ref ssh_enabled ssh_bind ssh_port ssh_password web_enabled web_port web_bind current_state prior_proxy prior_proxy_kind proxy_kind="uri" proxy_chain_yaml="" proxy_changed=0 proxy_probe_ok=0 running_workspace new_workspace preferred_shell shell_choice shell_changed=0 data_dir_changed=0 restart_reason="saved settings" control_subnet proxy_ip client_ip bridge_ip cleanup_tmp
   prior_proxy="$(_dk_read_env PROXY_URI)"
   prior_proxy_kind="$(_dk_read_env CAC_PROXY_CONFIG_KIND)"
   current_state="$(_dk_container_state)"
@@ -676,7 +676,6 @@ _dk_cmd_setup() {
   [[ -n "${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}" ]] && \
     _dk_write_env CAC_DIRECT_DNS_SERVER "${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}"
   if [[ -f "$_dk_env_file" ]]; then
-    local cleanup_tmp
     cleanup_tmp=$(mktemp)
     grep -v -E '^(DOCKER_HOST|CAC_WORKSPACE_HOST)=' "$_dk_env_file" > "$cleanup_tmp" && mv "$cleanup_tmp" "$_dk_env_file"
   fi
@@ -923,7 +922,7 @@ _dk_prompt_cleanup_project_images() {
 
   echo ""
   _warn "Found old cac-docker-claude images that are not used by current containers."
-  while IFS=$'\t' read -r ref repo tag size created; do
+  while IFS=$'\t' read -r ref _repo _tag _size _created; do
     [[ -n "$ref" ]] || continue
     printf '  %s  %s  %s\n' "$ref" "${size:-unknown-size}" "${created:-unknown-age}"
   done <<< "$candidates"
@@ -933,7 +932,7 @@ _dk_prompt_cleanup_project_images() {
     return 0
   fi
 
-  while IFS=$'\t' read -r ref repo tag size created; do
+  while IFS=$'\t' read -r ref _repo _tag _size _created; do
     [[ -n "$ref" ]] || continue
     if _dk_host_docker image rm "$ref"; then
       removed=$((removed + 1))

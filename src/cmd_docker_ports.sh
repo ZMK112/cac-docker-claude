@@ -1,4 +1,5 @@
 # ── cac docker — port forwarding helpers ────────────────────────────
+# shellcheck disable=SC2154  # globals are defined in cmd_docker_common.sh before concatenation
 
 _dk_port_forward() {
   local port="$1" mode

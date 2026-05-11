@@ -1,4 +1,5 @@
 # ── cac docker — runtime/build/env helpers ──────────────────────────
+# shellcheck disable=SC2154  # globals are defined in cmd_docker_common.sh before concatenation
 
 _dk_host_docker() {
   env -u DOCKER_HOST -u DOCKER_CONTEXT docker "$@"
@@ -664,11 +665,11 @@ _dk_compose() {
 }
 
 _dk_wait_runtime_ready() {
-  local state="" docker_api_rc="" runtime_rc="" runtime_user="" runtime_home="" tries phase="" detail="" last_detail=""
+  local state="" docker_api_rc="" runtime_rc="" runtime_user="" runtime_home="" phase="" detail="" last_detail=""
   runtime_user="$(_dk_runtime_user_name)"
   runtime_home="${CAC_FAKE_HOME:-$(_dk_read_env CAC_FAKE_HOME)}"
   runtime_home="${runtime_home:-/home/${runtime_user}}"
-  for tries in $(seq 1 90); do
+  for _ in $(seq 1 90); do
     state=$(_dk_compose ps --format '{{.State}}' "$_dk_service" 2>/dev/null || echo "")
     if [[ "$state" != "running" ]]; then
       phase="state"

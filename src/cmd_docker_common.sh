@@ -306,6 +306,7 @@ with open(compose_path, "w", encoding="utf-8") as fh:
 PY
 }
 
+# shellcheck disable=SC2120  # intentionally supports defaulting to current CAC_DATA
 _dk_data_dir_abs() {
   local raw="${1:-$(_dk_data_dir_raw)}" docker_dir
   docker_dir="$(_docker_dir)"

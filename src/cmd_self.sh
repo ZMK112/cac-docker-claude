@@ -144,7 +144,8 @@ _self_restore_state_from_backup() {
 }
 
 _self_finalize_docker_resources_after_upgrade() {
-    local install_dir="$1" backup_dir="$2" install_docker_dir="${install_dir}/docker" target_dir="$HOME/.cac/docker" installed_source_dir="$HOME/.cac/source" installed_docker_dir="$HOME/.cac/source/docker"
+    local install_dir="$1" backup_dir="$2" target_dir="$HOME/.cac/docker" installed_docker_dir="$HOME/.cac/source/docker"
+    local install_docker_dir="${install_dir}/docker"
     local new_dir="" installed_docker_abs="" target_abs=""
 
     if [[ -d "$installed_docker_dir" && -f "${installed_docker_dir}/docker-compose.yml" ]]; then
@@ -241,7 +242,8 @@ PY
 }
 
 _self_download_latest_stable_release() {
-    local repo="${1:-$_SELF_STABLE_REPO}" tmp_dir="$2" release_json="$tmp_dir/release.json"
+    local repo="${1:-$_SELF_STABLE_REPO}" tmp_dir="$2"
+    local release_json="$tmp_dir/release.json"
     local api_url info_file tag zip_name zip_url sha_name sha_url zip_path sha_path force="${3:-0}"
     [[ -n "$repo" ]] || _die "stable release repo is empty"
     api_url="https://api.github.com/repos/${repo}/releases/latest"
