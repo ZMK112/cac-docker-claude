@@ -151,6 +151,7 @@ _dk_refresh_mihomo_chain_configs() {
   chain_internal_cidrs="${CAC_PROXY_CHAIN_INTERNAL_CIDRS:-$(_dk_read_env CAC_PROXY_CHAIN_INTERNAL_CIDRS)}"
   chain_internal_domains="${CAC_PROXY_CHAIN_INTERNAL_DOMAINS:-$(_dk_read_env CAC_PROXY_CHAIN_INTERNAL_DOMAINS)}"
   chain_direct_keywords="${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}"
+  chain_direct_keywords="${chain_direct_keywords:-akamai-access.com,timeresearch,rockbund}"
   chain_direct_dns="${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}"
   dns_server="${DNS_SERVER:-$(_dk_read_env DNS_SERVER)}"
   dns_server="${dns_server:-https://1.1.1.1/dns-query}"
@@ -671,8 +672,10 @@ _dk_cmd_setup() {
   _dk_write_env CAC_HOST_WEB_BIND "$web_bind"
   _dk_write_env CAC_HOST_WEB_PORT "$web_port"
   _dk_write_env CAC_FAKE_SHELL "$preferred_shell"
-  [[ -n "${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}" ]] && \
-    _dk_write_env CAC_DIRECT_DOMAIN_KEYWORDS "${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}"
+  _dk_write_env CAC_DIRECT_DOMAIN_KEYWORDS "${CAC_DIRECT_DOMAIN_KEYWORDS:-$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)}"
+  if [[ -z "$(_dk_read_env CAC_DIRECT_DOMAIN_KEYWORDS)" ]]; then
+    _dk_write_env CAC_DIRECT_DOMAIN_KEYWORDS "akamai-access.com,timeresearch,rockbund"
+  fi
   [[ -n "${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}" ]] && \
     _dk_write_env CAC_DIRECT_DNS_SERVER "${CAC_DIRECT_DNS_SERVER:-$(_dk_read_env CAC_DIRECT_DNS_SERVER)}"
   if [[ -f "$_dk_env_file" ]]; then
