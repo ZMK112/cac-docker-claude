@@ -3,19 +3,46 @@
 _SELF_REPO="https://raw.githubusercontent.com/ZMK112/cac-docker-claude/main"
 _SELF_STABLE_REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-ZMK112/cac-docker-claude}}"
 
+_self_safe_rm_path() {
+    local path="$1"
+    [[ -e "$path" || -L "$path" ]] || return 0
+    if [[ ! -L "$path" ]]; then
+        chmod -R u+rwX "$path" 2>/dev/null || true
+    fi
+    rm -rf "$path" 2>/dev/null
+}
+
+_self_normalize_copy_permissions() {
+    local path="$1"
+    [[ -e "$path" || -L "$path" ]] || return 0
+    [[ -L "$path" ]] && return 0
+    chmod -R u+rwX "$path" 2>/dev/null || true
+}
+
+_self_cleanup_state_dir() {
+    local path="$1"
+    [[ -n "$path" ]] || return 0
+    if ! _self_safe_rm_path "$path"; then
+        echo "$(_yellow "warning:") preserved Docker state backup: $path" >&2
+        echo "$(_dim "cleanup skipped because some migrated files are not removable by the current user")" >&2
+    fi
+}
+
 _self_copy_if_present() {
     local src="$1" dst="$2"
     [[ -e "$src" || -L "$src" ]] || return 0
-    rm -rf "$dst"
-    cp -pR "$src" "$dst"
+    _self_safe_rm_path "$dst" || return 1
+    cp -R "$src" "$dst" || return 1
+    _self_normalize_copy_permissions "$dst"
 }
 
 _self_copy_if_present_with_progress() {
     local src="$1" dst="$2" label="$3"
     [[ -e "$src" || -L "$src" ]] || return 0
-    rm -rf "$dst"
-    cp -pR "$src" "$dst" &
+    _self_safe_rm_path "$dst" || return 1
+    cp -R "$src" "$dst" &
     _wait_with_progress "$label" "$!" || return 1
+    _self_normalize_copy_permissions "$dst"
 }
 
 _self_copy_docker_state_if_present() {
@@ -54,24 +81,27 @@ _self_backup_current_install() {
 _self_restore_install_backup() {
     local backup_dir="$1" dist_dir="$HOME/.cac-dist" bin_entry="$HOME/bin/cac" docker_dir="$HOME/.cac/docker" source_dir="$HOME/.cac/source"
 
-    rm -rf "$dist_dir"
+    _self_safe_rm_path "$dist_dir" || true
     if [[ -e "${backup_dir}/cac-dist" ]]; then
-        cp -pR "${backup_dir}/cac-dist" "$dist_dir"
+        cp -R "${backup_dir}/cac-dist" "$dist_dir"
+        _self_normalize_copy_permissions "$dist_dir"
     fi
 
     mkdir -p "$HOME/bin"
-    rm -rf "$bin_entry"
+    _self_safe_rm_path "$bin_entry" || true
     if [[ -e "${backup_dir}/cac-entry" || -L "${backup_dir}/cac-entry" ]]; then
-        cp -pR "${backup_dir}/cac-entry" "$bin_entry"
+        cp -R "${backup_dir}/cac-entry" "$bin_entry"
+        _self_normalize_copy_permissions "$bin_entry"
     fi
 
-    rm -rf "$source_dir"
+    _self_safe_rm_path "$source_dir" || true
     if [[ -e "${backup_dir}/source" ]]; then
         mkdir -p "$(dirname "$source_dir")"
-        cp -pR "${backup_dir}/source" "$source_dir"
+        cp -R "${backup_dir}/source" "$source_dir"
+        _self_normalize_copy_permissions "$source_dir"
     fi
 
-    rm -rf "$docker_dir"
+    _self_safe_rm_path "$docker_dir" || true
     if [[ -f "${backup_dir}/docker-link-target" ]]; then
         local target
         target="$(cat "${backup_dir}/docker-link-target")"
@@ -81,7 +111,8 @@ _self_restore_install_backup() {
         fi
     elif [[ -e "${backup_dir}/docker-dir" ]]; then
         mkdir -p "$(dirname "$docker_dir")"
-        cp -pR "${backup_dir}/docker-dir" "$docker_dir"
+        cp -R "${backup_dir}/docker-dir" "$docker_dir"
+        _self_normalize_copy_permissions "$docker_dir"
     fi
 }
 
@@ -152,7 +183,7 @@ _self_finalize_docker_resources_after_upgrade() {
         installed_docker_abs="$(cd "$installed_docker_dir" && pwd -P)"
         target_abs="$(cd "$target_dir" 2>/dev/null && pwd -P || true)"
         if [[ "$target_abs" != "$installed_docker_abs" ]]; then
-            rm -rf "$target_dir"
+            _self_safe_rm_path "$target_dir" || return 1
             mkdir -p "$(dirname "$target_dir")"
             ln -s "$installed_docker_abs" "$target_dir"
         fi
@@ -176,12 +207,12 @@ _self_finalize_docker_resources_after_upgrade() {
         --exclude '*.pyo' \
         "${source_dir}/" "${new_dir}/" &
     if ! _wait_with_progress "Syncing Docker resources after upgrade" "$!"; then
-        rm -rf "$new_dir"
+        _self_safe_rm_path "$new_dir" || true
         return 1
     fi
 
     _self_restore_state_from_backup "$backup_dir" "$new_dir"
-    rm -rf "$target_dir"
+    _self_safe_rm_path "$target_dir" || return 1
     mv "$new_dir" "$target_dir"
 }
 
@@ -309,7 +340,8 @@ PY
     tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/cac-upgrade.XXXXXX")"
     backup_dir="$(mktemp -d "${TMPDIR:-/tmp}/cac-upgrade-backup.XXXXXX")"
     install_dir="$(_self_find_install_dir "$source" "$tmp_dir")" || {
-        rm -rf "$tmp_dir" "$backup_dir"
+        _self_safe_rm_path "$tmp_dir" || true
+        _self_cleanup_state_dir "$backup_dir"
         _die "could not find install.sh in release path: $source"
     }
 
@@ -321,7 +353,8 @@ PY
         cd "$install_dir" || exit 1
         bash install.sh --local --yes --skip-identity
     ) && _self_finalize_docker_resources_after_upgrade "$install_dir" "$backup_dir" && _self_validate_upgraded_install && _self_validate_preserved_state "$backup_dir"; then
-        rm -rf "$tmp_dir" "$backup_dir"
+        _self_safe_rm_path "$tmp_dir" || true
+        _self_cleanup_state_dir "$backup_dir"
         elapsed=$(_timer_elapsed)
         echo "$(_green_bold "Upgraded") cac $(_dim "in $elapsed")"
         if [[ "$cleanup_package" -eq 1 ]]; then
@@ -334,7 +367,8 @@ PY
 
     echo "$(_yellow "warning:") upgrade failed; rolling back previous install" >&2
     _self_restore_install_backup "$backup_dir"
-    rm -rf "$tmp_dir" "$backup_dir"
+    _self_safe_rm_path "$tmp_dir" || true
+    _self_cleanup_state_dir "$backup_dir"
     _die "upgrade failed and previous install was restored"
 }
 
@@ -343,15 +377,15 @@ _self_cmd_update_stable() {
     tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/cac-stable-update.XXXXXX")"
     echo "Updating cac Docker install to latest stable release ..."
     zip_path="$(_self_download_latest_stable_release "$repo" "$tmp_dir" "$force")" || {
-        rm -rf "$tmp_dir"
+        _self_safe_rm_path "$tmp_dir" || true
         return 1
     }
     if [[ "$zip_path" == "__CAC_ALREADY_CURRENT__" ]]; then
-        rm -rf "$tmp_dir"
+        _self_safe_rm_path "$tmp_dir" || true
         return 0
     fi
     _self_cmd_upgrade "$zip_path"
-    rm -rf "$tmp_dir"
+    _self_safe_rm_path "$tmp_dir" || true
 }
 
 cmd_self() {

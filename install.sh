@@ -167,6 +167,31 @@ link_entrypoint() {
     ln -sfn "${DIST_DIR}/cac" "${BIN_DIR}/cac"
 }
 
+safe_rm_path() {
+    local path="$1"
+    [[ -e "$path" || -L "$path" ]] || return 0
+    if [[ ! -L "$path" ]]; then
+        chmod -R u+rwX "$path" 2>/dev/null || true
+    fi
+    rm -rf "$path" 2>/dev/null
+}
+
+normalize_copy_permissions() {
+    local path="$1"
+    [[ -e "$path" || -L "$path" ]] || return 0
+    [[ -L "$path" ]] && return 0
+    chmod -R u+rwX "$path" 2>/dev/null || true
+}
+
+cleanup_state_dir() {
+    local path="$1"
+    [[ -n "$path" ]] || return 0
+    if ! safe_rm_path "$path"; then
+        yellow "Preserved Docker state backup: ${path}"
+        yellow "Cleanup skipped because some migrated files are not removable by the current user."
+    fi
+}
+
 copy_if_present() {
     local src="$1" dst="$2"
     local parent base tmp
@@ -175,12 +200,13 @@ copy_if_present() {
     base="$(basename "$dst")"
     tmp="${parent}/.${base}.$$.new"
     mkdir -p "$parent"
-    rm -rf "$tmp"
-    if ! cp -pR "$src" "$tmp"; then
-        rm -rf "$tmp"
+    safe_rm_path "$tmp" || return 1
+    if ! cp -R "$src" "$tmp"; then
+        safe_rm_path "$tmp" || true
         return 1
     fi
-    rm -rf "$dst"
+    normalize_copy_permissions "$tmp"
+    safe_rm_path "$dst" || return 1
     mv "$tmp" "$dst"
 }
 
@@ -192,14 +218,15 @@ copy_if_present_with_progress() {
     base="$(basename "$dst")"
     tmp="${parent}/.${base}.$$.new"
     mkdir -p "$parent"
-    rm -rf "$tmp"
+    safe_rm_path "$tmp" || return 1
     echo "$label ..."
-    cp -pR "$src" "$tmp" &
+    cp -R "$src" "$tmp" &
     if ! wait_with_progress "$label" "$!"; then
-        rm -rf "$tmp"
+        safe_rm_path "$tmp" || true
         return 1
     fi
-    rm -rf "$dst"
+    normalize_copy_permissions "$tmp"
+    safe_rm_path "$dst" || return 1
     mv "$tmp" "$dst"
 }
 
@@ -288,7 +315,7 @@ sync_docker_resources() {
         "${source_dir}/" "${target_dir}/" &
     if ! wait_with_progress "Syncing Docker resources" "$!"; then
         if [[ -n "$old_link_backup" && -L "$old_link_backup" ]]; then
-            rm -rf "$target_dir"
+            safe_rm_path "$target_dir" || true
             mv "$old_link_backup" "$target_dir"
             yellow "Docker resource install failed; restored old ${target_dir} symlink."
         fi
@@ -303,7 +330,7 @@ sync_docker_resources() {
         copy_if_present "${state_dir}/docker-compose.mounts.yml" "${target_dir}/docker-compose.mounts.yml"
     }; then
         if [[ -n "$old_link_backup" && -L "$old_link_backup" ]]; then
-            rm -rf "$target_dir"
+            safe_rm_path "$target_dir" || true
             mv "$old_link_backup" "$target_dir"
             yellow "Docker state restore failed; restored old ${target_dir} symlink."
         fi
@@ -317,7 +344,7 @@ sync_docker_resources() {
         fi
     fi
     [[ -n "$old_link_backup" ]] && rm -f "$old_link_backup"
-    rm -rf "$state_dir"
+    cleanup_state_dir "$state_dir"
 }
 
 link_source_docker_resources() {
@@ -374,8 +401,8 @@ link_source_docker_resources() {
             cyan "Previous Docker resource link target: ${old_link_target}"
         fi
     fi
-    [[ -n "$old_backup" ]] && rm -rf "$old_backup"
-    rm -rf "$state_dir"
+    [[ -n "$old_backup" ]] && safe_rm_path "$old_backup" || true
+    cleanup_state_dir "$state_dir"
 }
 
 install_docker_resources() {

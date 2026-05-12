@@ -169,6 +169,22 @@ grep -q 'export PATH="$HOME/bin:$PATH"' "${tmp_home}/.zshrc"
 grep -q 'export KEEP_ME=1' "${tmp_home}/.zshrc"
 pass "installer-path-cleanup"
 
+tmp_perm_home="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-perms.XXXXXX")"
+trap 'rm -rf "$tmp_home" "$tmp_perm_home"' EXIT
+mkdir -p "${tmp_perm_home}/.cac/docker/data/home/cherny/.claude/agents"
+printf 'legacy agent data\n' > "${tmp_perm_home}/.cac/docker/data/home/cherny/.claude/agents/example.txt"
+chmod 500 "${tmp_perm_home}/.cac/docker/data/home/cherny/.claude/agents"
+chmod 500 "${tmp_perm_home}/.cac/docker/data/home/cherny/.claude"
+HOME="$tmp_perm_home" bash install.sh --local --no-build >/tmp/cac-docker-claude-install-perms.out
+[[ -e "${tmp_perm_home}/.cac/docker/data/home/cherny/.claude/agents/example.txt" ]]
+if find "${tmp_perm_home}/.cac" -maxdepth 1 -name '.docker-state.*' -print | grep -q .; then
+    printf 'installer left temporary Docker state backups behind\n' >&2
+    find "${tmp_perm_home}/.cac" -maxdepth 1 -name '.docker-state.*' -print >&2
+    exit 1
+fi
+rm -rf "$tmp_perm_home"
+pass "installer-docker-state-permissions"
+
 if [[ "$suite" == "full" ]]; then
     command -v docker >/dev/null 2>&1 || { printf 'docker is required for --suite full\n' >&2; exit 1; }
     docker compose version >/dev/null
