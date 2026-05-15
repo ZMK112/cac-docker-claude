@@ -127,6 +127,67 @@ PY
 rm -rf "$tmp_chain"
 pass "mihomo-direct-dns-default"
 
+python3 - <<'PY'
+import json
+import os
+import sys
+sys.path.insert(0, os.path.abspath("docker"))
+from lib.protocols import parse
+from lib.singbox import render
+
+uri = (
+    "vless://00000000-0000-0000-0000-000000000000@example.com:443"
+    "?encryption=none&security=tls&type=grpc&host=edge.example.com"
+    "&serviceName=grpc-service#tag"
+)
+proxy = parse(uri)
+assert proxy.type == "vless"
+assert proxy.server == "example.com"
+assert proxy.port == 443
+assert proxy.uuid == "00000000-0000-0000-0000-000000000000"
+assert proxy.tls is True
+assert proxy.sni == "edge.example.com"
+assert proxy.extra["transport"] == "grpc"
+assert proxy.extra["service_name"] == "grpc-service"
+cfg = render(
+    proxy,
+    dns_server="https://1.1.1.1/dns-query",
+    direct_dns_server="127.0.0.11",
+    direct_domain_keywords=[],
+    tun_address="172.19.0.1/30",
+    tun_mtu=9000,
+)
+outbound = cfg["outbounds"][0]
+assert outbound["type"] == "vless", json.dumps(outbound)
+assert outbound["server"] == "example.com", json.dumps(outbound)
+assert outbound["domain_resolver"] == "direct-dns", json.dumps(outbound)
+assert outbound["tls"]["server_name"] == "edge.example.com", json.dumps(outbound)
+assert outbound["transport"] == {
+    "type": "grpc",
+    "service_name": "grpc-service",
+}, json.dumps(outbound)
+PY
+pass "vless-grpc-share-link"
+
+PROXY_URI='vless://00000000-0000-0000-0000-000000000000@example.com:443?encryption=none&security=tls&type=grpc&host=edge.example.com&serviceName=grpc-service#tag' \
+DNS_SERVER='https://1.1.1.1/dns-query' \
+CAC_DIRECT_DNS_SERVER='127.0.0.11' \
+PYTHONPATH="${PWD}/docker" \
+python3 -m lib > /tmp/cac-vless-config.json
+python3 - /tmp/cac-vless-config.json <<'PY'
+import json
+import sys
+cfg = json.load(open(sys.argv[1]))
+outbound = cfg["outbounds"][0]
+assert outbound["server"] == "example.com", json.dumps(outbound)
+assert outbound["domain_resolver"] == "direct-dns", json.dumps(outbound)
+assert outbound["tls"]["server_name"] == "edge.example.com", json.dumps(outbound)
+assert outbound["transport"]["service_name"] == "grpc-service", json.dumps(outbound)
+assert any(server["tag"] == "direct-dns" for server in cfg["dns"]["servers"])
+PY
+rm -f /tmp/cac-vless-config.json
+pass "vless-config-preserves-server-name"
+
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.20')" == "0.1.20" ]]
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.20')" == "0.1.20" ]]
 pass "version-normalization"

@@ -135,6 +135,14 @@ def _b64decode(s: str) -> str:
     return base64.b64decode(s).decode()
 
 
+def _first_param(params: dict[str, list[str]], *names: str) -> str:
+    for name in names:
+        value = params.get(name, [""])[0]
+        if value:
+            return value
+    return ""
+
+
 def _parse_ss(uri: str) -> ProxyConfig:
     uri = uri.split("#", 1)[0]  # strip fragment/tag
     body = uri[len("ss://"):]
@@ -191,6 +199,9 @@ def _parse_vmess(uri: str) -> ProxyConfig:
 def _parse_vless(uri: str) -> ProxyConfig:
     parsed = urlparse(uri)
     params = parse_qs(parsed.query)
+    host = _first_param(params, "host", "authority")
+    sni = _first_param(params, "sni", "servername", "serverName") or host
+    transport = _first_param(params, "type", "network") or "tcp"
 
     return ProxyConfig(
         type="vless",
@@ -198,10 +209,18 @@ def _parse_vless(uri: str) -> ProxyConfig:
         port=parsed.port or 443,
         uuid=parsed.username or "",
         tls=params.get("security", ["none"])[0] in ("tls", "reality"),
-        sni=params.get("sni", [""])[0],
+        sni=sni,
         extra={
-            "flow": params.get("flow", [""])[0],
-            "transport": params.get("type", ["tcp"])[0],
+            "flow": _first_param(params, "flow"),
+            "transport": transport,
+            "host": host,
+            "service_name": _first_param(
+                params,
+                "serviceName",
+                "service_name",
+                "grpc-service-name",
+                "grpcServiceName",
+            ),
         },
     )
 

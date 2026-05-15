@@ -99,14 +99,13 @@ def _dns_server(tag: str, server: str, detour: str | None, *, legacy_https: bool
 
 
 def _dns_section(server: str, direct_server: str, direct_domain_keywords: list[str]) -> dict:
-    servers = [_dns_server("remote-dns", server, "proxy")]
+    servers = [_dns_server("direct-dns", direct_server, "direct", legacy_https=True), _dns_server("remote-dns", server, "proxy")]
     dns: dict[str, Any] = {
         "servers": servers,
         "final": "remote-dns",
         "strategy": "ipv4_only",
     }
     if direct_domain_keywords:
-        servers.insert(0, _dns_server("direct-dns", direct_server, "direct", legacy_https=True))
         dns["rules"] = [
             {"domain_keyword": direct_domain_keywords, "server": "direct-dns"},
         ]
@@ -150,6 +149,15 @@ def _apply_tls(out: dict, p: ProxyConfig) -> None:
         out["tls"] = tls
 
 
+def _is_ip_address(value: str) -> bool:
+    return value.replace(".", "").isdigit() or ":" in value
+
+
+def _apply_domain_resolver(out: dict, p: ProxyConfig) -> None:
+    if p.server and not _is_ip_address(p.server):
+        out["domain_resolver"] = "direct-dns"
+
+
 _OUTBOUND_BUILDERS: dict[str, Any] = {}
 
 
@@ -172,11 +180,12 @@ def _outbound_socks5(p: ProxyConfig) -> dict:
         out["username"] = p.username
     if p.password:
         out["password"] = p.password
+    _apply_domain_resolver(out, p)
     return out
 
 
 def _outbound_shadowsocks(p: ProxyConfig) -> dict:
-    return {
+    out = {
         "type": "shadowsocks",
         "tag": "proxy",
         "server": p.server,
@@ -184,6 +193,8 @@ def _outbound_shadowsocks(p: ProxyConfig) -> dict:
         "method": p.method,
         "password": p.password,
     }
+    _apply_domain_resolver(out, p)
+    return out
 
 
 def _outbound_http(p: ProxyConfig) -> dict:
@@ -198,6 +209,7 @@ def _outbound_http(p: ProxyConfig) -> dict:
     if p.password:
         out["password"] = p.password
     _apply_tls(out, p)
+    _apply_domain_resolver(out, p)
     return out
 
 
@@ -212,6 +224,7 @@ def _outbound_vmess(p: ProxyConfig) -> dict:
         "security": p.security or "auto",
     }
     _apply_tls(out, p)
+    _apply_domain_resolver(out, p)
     return out
 
 
@@ -227,9 +240,20 @@ def _outbound_vless(p: ProxyConfig) -> dict:
     if flow:
         out["flow"] = flow
     _apply_tls(out, p)
+    _apply_domain_resolver(out, p)
     transport = p.extra.get("transport", "tcp")
     if transport and transport != "tcp":
-        out["transport"] = {"type": transport}
+        outbound_transport: dict[str, Any] = {"type": transport}
+        if transport == "grpc":
+            service_name = p.extra.get("service_name", "")
+            if service_name:
+                outbound_transport["service_name"] = service_name
+        host = p.extra.get("host", "")
+        if host and transport == "http":
+            outbound_transport["host"] = [host]
+        elif host and transport == "httpupgrade":
+            outbound_transport["host"] = host
+        out["transport"] = outbound_transport
     return out
 
 
@@ -242,6 +266,7 @@ def _outbound_trojan(p: ProxyConfig) -> dict:
         "password": p.password,
     }
     _apply_tls(out, p)
+    _apply_domain_resolver(out, p)
     return out
 
 

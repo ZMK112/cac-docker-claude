@@ -30,7 +30,7 @@ def main() -> None:
         sys.exit(1)
 
     proxy = parse(uri)
-    if proxy.server and not proxy.server.replace(".", "").isdigit():
+    if proxy.type in {"http", "socks5", "shadowsocks"} and proxy.server and not proxy.server.replace(".", "").isdigit():
         try:
             proxy.server = socket.gethostbyname(proxy.server)
         except OSError:
