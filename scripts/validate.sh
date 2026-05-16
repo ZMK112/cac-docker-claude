@@ -37,6 +37,14 @@ bash build.sh >/dev/null
 bash -n cac
 pass "build"
 
+awk '
+    /apt-get install -y --no-install-recommends/ { in_install=1 }
+    in_install && /(^|[[:space:]])bubblewrap([[:space:]\\]|$)/ { found=1 }
+    in_install && /rm -rf \/var\/lib\/apt\/lists/ { in_install=0 }
+    END { exit(found ? 0 : 1) }
+' docker/Dockerfile
+pass "dockerfile-bubblewrap"
+
 ./cac --help >/dev/null
 ./cac --version >/dev/null
 ./cac docker help >/dev/null

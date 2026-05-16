@@ -28,7 +28,7 @@ RUN set -eux; \
     CURL="curl ${BUILD_PROXY:+-x $BUILD_PROXY}"; \
     export ALL_PROXY="${BUILD_PROXY:-}" all_proxy="${BUILD_PROXY:-}"; \
     apt-get update && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl git gosu iproute2 \
+      build-essential bubblewrap ca-certificates curl git gosu iproute2 \
       jq fd-find locales nftables procps python3 python3-venv docker.io \
       openssh-server openssl ripgrep sqlite3 sudo tree unzip util-linux uuid-runtime zip tzdata \
       vim tmux less bat zsh fonts-powerline \
