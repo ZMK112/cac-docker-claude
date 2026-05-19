@@ -556,6 +556,55 @@ prepare_runtime_user() {
   [[ -f "$CAC_RUNTIME_ENV_FILE" ]] && chown "$CURRENT_RUNTIME_UID:$CURRENT_RUNTIME_GID" "$CAC_RUNTIME_ENV_FILE" 2>/dev/null || true
 }
 
+repair_runtime_home_permissions() {
+  local uid_gid="${CURRENT_RUNTIME_UID}:${CURRENT_RUNTIME_GID}"
+  local path
+
+  mkdir -p \
+    "$PROFILE_HOME" \
+    "$PROFILE_HOME/.local" \
+    "$PROFILE_HOME/.local/bin" \
+    "$PROFILE_HOME/.cache" \
+    "$PROFILE_HOME/.config" \
+    "$PROFILE_HOME/.claude" \
+    "$PROFILE_HOME/.cac"
+
+  chown -R "$uid_gid" \
+    "$PROFILE_HOME/.local" \
+    "$PROFILE_HOME/.cache" \
+    "$PROFILE_HOME/.config" \
+    "$PROFILE_HOME/.claude" \
+    "$PROFILE_HOME/.cac" 2>/dev/null || true
+
+  for path in \
+    "$PROFILE_HOME" \
+    "$PROFILE_HOME/.bashrc" \
+    "$PROFILE_HOME/.profile" \
+    "$PROFILE_HOME/.bash_profile" \
+    "$PROFILE_HOME/.zshrc" \
+    "$PROFILE_HOME/.zprofile" \
+    "$PROFILE_HOME/.tmux.conf" \
+    "$PROFILE_HOME/.claude.json" \
+    "$CAC_RUNTIME_ENV_FILE"
+  do
+    [[ -e "$path" || -L "$path" ]] || continue
+    chown -h "$uid_gid" "$path" 2>/dev/null || true
+  done
+
+  chmod u+rwx,g+rwx "$PROFILE_HOME" 2>/dev/null || true
+  chmod -R u+rwX,g+rwX \
+    "$PROFILE_HOME/.local" \
+    "$PROFILE_HOME/.cache" \
+    "$PROFILE_HOME/.config" \
+    "$PROFILE_HOME/.claude" \
+    "$PROFILE_HOME/.cac" 2>/dev/null || true
+
+  [[ -f "$PROFILE_HOME/.claude.json" ]] && chmod 0600 "$PROFILE_HOME/.claude.json" 2>/dev/null || true
+  [[ -f "$PROFILE_HOME/.claude/.credentials.json" ]] && chmod 0600 "$PROFILE_HOME/.claude/.credentials.json" 2>/dev/null || true
+  [[ -d "$PROFILE_HOME/.ssh" ]] && chmod 0700 "$PROFILE_HOME/.ssh" 2>/dev/null || true
+  [[ -f "$PROFILE_HOME/.ssh/authorized_keys" ]] && chmod 0600 "$PROFILE_HOME/.ssh/authorized_keys" 2>/dev/null || true
+}
+
 hide_container_traces() {
   rm -f /.dockerenv /run/.containerenv 2>/dev/null || true
 }
@@ -1048,6 +1097,7 @@ PY
   apply_cherny_profile "$_env_dir"
   echo "Preparing runtime user..."
   prepare_runtime_user
+  repair_runtime_home_permissions
   echo "Writing runtime shims..."
   write_runtime_shims
   export PATH="$CAC_DIR/shim-bin:$PATH"
@@ -1066,6 +1116,7 @@ PY
   echo "Preparing CloudCLI runtime..."
   prepare_cloudcli_home_mapping "$_env_dir"
   prepare_cloudcli_env_file
+  repair_runtime_home_permissions
   ensure_x11_socket_dir
 
   [[ "$HEALTHCHECK" == "1" ]] && echo "Startup checks available via: cac-check"

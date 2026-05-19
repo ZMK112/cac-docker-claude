@@ -24,7 +24,7 @@ Running Claude Code inside a container is useful only if the runtime stays predi
 | Proxy chains | Mihomo YAML chain configs can be converted into sing-box runtime config |
 | Persistence | Claude credentials, personalization, home data, mounts, and Docker settings live under `~/.cac/docker` |
 | Builds | Stable installs include full source under `~/.cac/source`, so images can be rebuilt locally |
-| Access | Optional SSH, Web UI, Docker socket proxy, child-container proxy bridge, zsh, tmux, bubblewrap, and extra mounts |
+| Access | SSH on localhost by default, Web UI, Docker socket proxy, child-container proxy bridge, zsh, tmux, bubblewrap, and extra mounts |
 | Updates | `cac docker update` installs the latest stable release with rollback behavior |
 
 ## Components
@@ -255,7 +255,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.26
+ghcr.io/zmk112/cac-docker-claude:v0.1.27
 ```
 
 Force a rebuild:
@@ -318,7 +318,7 @@ If enabled during setup, the Web UI is exposed on the configured local port, nor
 http://127.0.0.1:3001
 ```
 
-SSH can also be enabled for direct container access. `cac docker setup` lets you enable SSH, choose the host port, and set the password. After the stack starts, `cac docker status` prints the SSH command.
+SSH is enabled by default for direct localhost container access. `cac docker setup` lets you keep SSH on, choose the host port, and set the password. After the stack starts, `cac docker status` prints the SSH command.
 
 Default local connection:
 
@@ -339,7 +339,7 @@ Keep SSH and the no-login Web UI bound to `127.0.0.1` unless you explicitly need
 
 New setup runs generate a random SSH password and a random child proxy bridge password when none exists. Existing `.env` values are preserved during install/update, so users with older deployments should review `CAC_HOST_SSH_BIND`, `CAC_HOST_WEB_BIND`, `CAC_SSH_PASSWORD`, and `CAC_CHILD_PROXY_BRIDGE_PASSWORD` manually.
 
-中文：SSH 用于从宿主机直接进入主容器。默认建议只监听 `127.0.0.1`，连接命令通常是 `ssh -p 2222 cherny@127.0.0.1`。如果要开放给局域网，先修改默认密码，并确认宿主机防火墙规则。
+中文：SSH 默认开启，用于从宿主机直接进入主容器，并默认只监听 `127.0.0.1`。连接命令通常是 `ssh -p 2222 cherny@127.0.0.1`。如果要开放给局域网，先修改默认密码，并确认宿主机防火墙规则。
 
 ## Troubleshooting
 
@@ -379,14 +379,14 @@ cac docker setup
 Build a source release asset:
 
 ```bash
-PKG_VERSION=v0.1.26 bash scripts/package-source.sh
+PKG_VERSION=v0.1.27 bash scripts/package-source.sh
 ```
 
 Upload these files to the GitHub release:
 
 ```text
-dist/cac-docker-claude-source-v0.1.26.zip
-dist/cac-docker-claude-source-v0.1.26.sha256
+dist/cac-docker-claude-source-v0.1.27.zip
+dist/cac-docker-claude-source-v0.1.27.sha256
 scripts/install-stable.sh
 ```
 
