@@ -15,7 +15,7 @@ ARG CAC_FAKE_GID=1001
 
 LABEL com.cac-docker-claude.project="true" \
       org.opencontainers.image.title="cac-docker-claude" \
-      org.opencontainers.image.source="https://github.com/ZMK112/cac-docker-claude" \
+      org.opencontainers.image.source="https://github.com/ZMK112/claude-docker" \
       cac.docker_cli_version="${DOCKER_CLI_VERSION}" \
       cac.docker_cli_api_version="${DOCKER_CLI_API_VERSION}"
 

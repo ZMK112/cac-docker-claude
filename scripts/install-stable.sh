@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_REPO="ZMK112/cac-docker-claude"
+DEFAULT_REPO="ZMK112/claude-docker"
 REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-$DEFAULT_REPO}}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cac-install-stable.XXXXXX")"
 INSTALL_ARGS=()
@@ -47,7 +47,7 @@ Usage: bash install-stable.sh [options]
 Download and install the latest stable cac-docker-claude source release.
 
 Options:
-  --repo owner/repo   GitHub release repo (default: ZMK112/cac-docker-claude)
+  --repo owner/repo   GitHub release repo (default: ZMK112/claude-docker)
   --yes               Non-interactive install; accepted for compatibility
   --skip-identity     Skip macOS host identity scan/review
   --force-identity    Overwrite existing macOS host identity files

@@ -1,7 +1,7 @@
 # ── cmd: self (cac self-management, like "uv self") ──────────────
 
-_SELF_REPO="https://raw.githubusercontent.com/ZMK112/cac-docker-claude/main"
-_SELF_STABLE_REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-ZMK112/cac-docker-claude}}"
+_SELF_REPO="https://raw.githubusercontent.com/ZMK112/claude-docker/main"
+_SELF_STABLE_REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-ZMK112/claude-docker}}"
 
 _self_safe_rm_path() {
     local path="$1"

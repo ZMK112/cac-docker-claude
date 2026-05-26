@@ -1,7 +1,7 @@
 # cac-docker-claude
 
-[![Latest release](https://img.shields.io/github/v/release/ZMK112/cac-docker-claude?sort=semver)](https://github.com/ZMK112/cac-docker-claude/releases/latest)
-[![License](https://img.shields.io/github/license/ZMK112/cac-docker-claude)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/ZMK112/claude-docker?sort=semver)](https://github.com/ZMK112/claude-docker/releases/latest)
+[![License](https://img.shields.io/github/license/ZMK112/claude-docker)](LICENSE)
 [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-required-2496ED)](https://docs.docker.com/compose/)
 [![sing-box](https://img.shields.io/badge/network-sing--box%20TUN-00A3FF)](https://sing-box.sagernet.org/)
 
@@ -73,7 +73,7 @@ Migration note: this installer and updater preserve existing Claude login state,
 中文提示：执行下面的一键安装或升级命令不会删除已有 Claude 登录信息、个性化配置、项目数据、挂载配置和 Docker 运行数据。迁移是安全的；安装和升级默认不会停止正在运行的旧容器，需要时再手动重建镜像/容器，不会因此要求重复登录。
 
 ```bash
-curl -fsSL https://github.com/ZMK112/cac-docker-claude/releases/latest/download/install-stable.sh | bash
+curl -fsSL https://github.com/ZMK112/claude-docker/releases/latest/download/install-stable.sh | bash
 ```
 
 The installer downloads a `cac-docker-claude-source-*.zip` release asset, verifies the `.sha256` file when present, installs the full source tree to `~/.cac/source`, and links:
@@ -255,7 +255,7 @@ CAC_DOCKER_BUILD_LOCAL=1
 That means normal installs do not depend on a remote runtime image pull. The pinned image name is still recorded for deterministic local tags and optional fallback:
 
 ```text
-ghcr.io/zmk112/cac-docker-claude:v0.1.27
+ghcr.io/zmk112/claude-docker:v0.1.27
 ```
 
 Force a rebuild:

@@ -2,7 +2,7 @@
 
 # shellcheck disable=SC2034  # used in build-concatenated cac script
 CAC_VERSION="0.1.27"
-CAC_DOCKER_IMAGE_REPO="${CAC_DOCKER_IMAGE_REPO:-ghcr.io/zmk112/cac-docker-claude}"
+CAC_DOCKER_IMAGE_REPO="${CAC_DOCKER_IMAGE_REPO:-ghcr.io/zmk112/claude-docker}"
 CAC_DOCKER_IMAGE_TAG="${CAC_DOCKER_IMAGE_TAG:-v0.1.27}"
 
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }

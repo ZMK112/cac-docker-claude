@@ -169,7 +169,7 @@ _dk_init() {
   docker_dir=$(_docker_dir)
   if [[ -z "$docker_dir" ]]; then
     _err "Cannot find docker/ directory. Run from the cac repo, or clone it first."
-    _err "  git clone https://github.com/ZMK112/cac-docker-claude.git && cd cac-docker-claude"
+    _err "  git clone https://github.com/ZMK112/claude-docker.git && cd claude-docker"
     return 1
   fi
   _dk_env_file="${docker_dir}/.env"

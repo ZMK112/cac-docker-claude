@@ -12,7 +12,7 @@ VERSIONS_DIR="$CAC_DIR/versions"
 
 # shellcheck disable=SC2034  # used in build-concatenated cac script
 CAC_VERSION="0.1.27"
-CAC_DOCKER_IMAGE_REPO="${CAC_DOCKER_IMAGE_REPO:-ghcr.io/zmk112/cac-docker-claude}"
+CAC_DOCKER_IMAGE_REPO="${CAC_DOCKER_IMAGE_REPO:-ghcr.io/zmk112/claude-docker}"
 CAC_DOCKER_IMAGE_TAG="${CAC_DOCKER_IMAGE_TAG:-v0.1.27}"
 
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
@@ -444,8 +444,8 @@ PYEOF
 # ━━━ cmd_self.sh ━━━
 # ── cmd: self (cac self-management, like "uv self") ──────────────
 
-_SELF_REPO="https://raw.githubusercontent.com/ZMK112/cac-docker-claude/main"
-_SELF_STABLE_REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-ZMK112/cac-docker-claude}}"
+_SELF_REPO="https://raw.githubusercontent.com/ZMK112/claude-docker/main"
+_SELF_STABLE_REPO="${CAC_STABLE_REPO:-${CAC_RELEASE_REPO:-ZMK112/claude-docker}}"
 
 _self_safe_rm_path() {
     local path="$1"
@@ -1613,7 +1613,7 @@ _dk_init() {
   docker_dir=$(_docker_dir)
   if [[ -z "$docker_dir" ]]; then
     _err "Cannot find docker/ directory. Run from the cac repo, or clone it first."
-    _err "  git clone https://github.com/ZMK112/cac-docker-claude.git && cd cac-docker-claude"
+    _err "  git clone https://github.com/ZMK112/claude-docker.git && cd claude-docker"
     return 1
   fi
   _dk_env_file="${docker_dir}/.env"
@@ -3301,6 +3301,7 @@ _dk_project_image_cleanup_candidates() {
   _dk_host_docker image ls --no-trunc --filter "label=com.cac-docker-claude.project=true" \
     --format '{{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null >> "$images_file" || true
   for repo in \
+    "ghcr.io/zmk112/claude-docker" \
     "ghcr.io/zmk112/cac-docker-claude" \
     "ghcr.io/zmk112/cac-docker" \
     "ghcr.io/nmhjklnm/cac-docker"

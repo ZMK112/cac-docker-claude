@@ -2,7 +2,7 @@
 # install.sh — cac-docker-claude installer
 set -euo pipefail
 
-REPO_BASE_URL="${CAC_REPO_BASE_URL:-https://raw.githubusercontent.com/ZMK112/cac-docker-claude/main}"
+REPO_BASE_URL="${CAC_REPO_BASE_URL:-https://raw.githubusercontent.com/ZMK112/claude-docker/main}"
 BIN_DIR="${HOME}/bin"
 DIST_DIR="${HOME}/.cac-dist"
 CAC_HOME="${HOME}/.cac"

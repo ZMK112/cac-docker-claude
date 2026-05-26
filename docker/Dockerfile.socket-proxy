@@ -2,7 +2,7 @@ FROM alpine:3.20
 
 LABEL com.cac-docker-claude.project="true" \
       org.opencontainers.image.title="cac-docker-claude-docker-proxy" \
-      org.opencontainers.image.source="https://github.com/ZMK112/cac-docker-claude"
+      org.opencontainers.image.source="https://github.com/ZMK112/claude-docker"
 
 RUN apk add --no-cache socat
 

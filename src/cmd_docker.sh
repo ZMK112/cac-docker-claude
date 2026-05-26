@@ -892,6 +892,7 @@ _dk_project_image_cleanup_candidates() {
   _dk_host_docker image ls --no-trunc --filter "label=com.cac-docker-claude.project=true" \
     --format '{{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null >> "$images_file" || true
   for repo in \
+    "ghcr.io/zmk112/claude-docker" \
     "ghcr.io/zmk112/cac-docker-claude" \
     "ghcr.io/zmk112/cac-docker" \
     "ghcr.io/nmhjklnm/cac-docker"

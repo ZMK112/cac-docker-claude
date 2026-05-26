@@ -29,11 +29,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ZMK112/cac-docker-claude.git"
+    "url": "git+https://github.com/ZMK112/claude-docker.git"
   },
-  "homepage": "https://github.com/ZMK112/cac-docker-claude",
+  "homepage": "https://github.com/ZMK112/claude-docker",
   "bugs": {
-    "url": "https://github.com/ZMK112/cac-docker-claude/issues"
+    "url": "https://github.com/ZMK112/claude-docker/issues"
   },
   "os": [
     "darwin",
