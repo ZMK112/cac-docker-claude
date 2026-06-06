@@ -28,6 +28,7 @@ def main() -> None:
 
     listen_address = os.environ.get("CAC_CHILD_PROXY_BRIDGE_LISTEN", "0.0.0.0").strip() or "0.0.0.0"
     listen_port = int(os.environ.get("CAC_CHILD_PROXY_BRIDGE_PORT", "17891"))
+    direct_dns = os.environ.get("CAC_DIRECT_DNS_SERVER", "").strip() or "127.0.0.11"
 
     proxy = parse(uri)
     print(
@@ -37,6 +38,7 @@ def main() -> None:
             listen_port=listen_port,
             username=username,
             password=password,
+            direct_dns_server=direct_dns,
         )
     )
 

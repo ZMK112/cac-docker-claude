@@ -196,6 +196,26 @@ PY
 rm -f /tmp/cac-vless-config.json
 pass "vless-config-preserves-server-name"
 
+PROXY_URI='vless://00000000-0000-0000-0000-000000000000@example.com:443?encryption=none&security=tls&type=grpc&host=edge.example.com&serviceName=grpc-service#tag' \
+CAC_CHILD_PROXY_BRIDGE_USER='bridge-user' \
+CAC_CHILD_PROXY_BRIDGE_PASSWORD='bridge-pass' \
+CAC_CHILD_PROXY_BRIDGE_PORT='17891' \
+CAC_DIRECT_DNS_SERVER='127.0.0.11' \
+PYTHONPATH="${PWD}/docker" \
+python3 -m lib.bridge > /tmp/cac-vless-bridge-config.json
+python3 - /tmp/cac-vless-bridge-config.json <<'PY'
+import json
+import sys
+cfg = json.load(open(sys.argv[1]))
+outbound = cfg["outbounds"][0]
+assert outbound["server"] == "example.com", json.dumps(outbound)
+assert outbound["domain_resolver"] == "direct-dns", json.dumps(outbound)
+assert any(server["tag"] == "direct-dns" for server in cfg["dns"]["servers"])
+assert cfg["dns"]["final"] == "direct-dns", json.dumps(cfg["dns"])
+PY
+rm -f /tmp/cac-vless-bridge-config.json
+pass "proxy-bridge-domain-resolver"
+
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version v0.1.20')" == "0.1.20" ]]
 [[ "$(bash -c 'set -- help; source ./cac >/dev/null 2>&1 || true; _normalize_release_version 0.1.20')" == "0.1.20" ]]
 pass "version-normalization"

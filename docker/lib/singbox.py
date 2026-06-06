@@ -39,9 +39,11 @@ def render_proxy_bridge(
     listen_port: int,
     username: str,
     password: str,
+    direct_dns_server: str = "127.0.0.11",
 ) -> dict[str, Any]:
     return {
         "log": {"level": "warn"},
+        "dns": _bridge_dns_section(direct_dns_server),
         "inbounds": [
             {
                 "type": "mixed",
@@ -64,6 +66,14 @@ def render_proxy_bridge(
 
 def render_proxy_bridge_json(proxy: ProxyConfig, **kwargs: Any) -> str:
     return json.dumps(render_proxy_bridge(proxy, **kwargs), indent=2)
+
+
+def _bridge_dns_section(direct_server: str) -> dict[str, Any]:
+    return {
+        "servers": [_dns_server("direct-dns", direct_server, "direct", legacy_https=True)],
+        "final": "direct-dns",
+        "strategy": "ipv4_only",
+    }
 
 
 def _dns_server(tag: str, server: str, detour: str | None, *, legacy_https: bool = False) -> dict[str, Any]:
